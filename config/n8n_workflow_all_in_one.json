@@ -1,0 +1,275 @@
+{
+  "name": "All-in-One: Local AI-Optimized Page Builder",
+  "active": false,
+  "settings": {},
+  "id": "27b4b1e2-3955-4121-902d-83f25a6af3c9",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "unit": "minutes",
+              "value": 10
+            }
+          ]
+        }
+      },
+      "id": "cron1",
+      "name": "Cron (every 10 min)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "powershell -Command \"Get-ChildItem -Path '{{ $env.NN_INBOX || \"D:\\\\newsroom\\\\inbox\\\\videos\" }}' -Filter *.mp4 -File | Select-Object -ExpandProperty FullName\" "
+      },
+      "id": "exec_list",
+      "name": "List New Videos (local)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\nconst stdout = $json.stdout || '';\nconst lines = stdout.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);\nreturn lines.map(file => ({json: { file }}));\n"
+      },
+      "id": "fn_split",
+      "name": "Split to Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Derive basic metadata from filename convention:\n// Example: MyGeneration_S02E07_2025-10-16_AI-in-Industry.mp4\nconst path = $json.file;\nconst bn = path.split(/\\\\|\\//).pop();\nconst base = bn.replace(/\\.mp4$/i, '');\nlet show='', episodeId='', publishDate='', topic='';\nconst parts = base.split('_');\nif (parts.length >= 4) {\n  show = parts[0];\n  episodeId = parts[1];\n  publishDate = parts[2];\n  topic = parts.slice(3).join(' ').replace(/[-_]/g,' ');\n} else {\n  show = parts[0] || 'Show';\n  episodeId = parts[1] || 'E01';\n  publishDate = parts[2] || new Date().toISOString().slice(0,10);\n  topic = parts.slice(3).join(' ') || 'Interview';\n}\nconst title = `Interview: ${topic} | ${show}`;\nreturn [{\n  json: {\n    file: path,\n    show, episodeId, publishDate, topic, title\n  }\n}];\n"
+      },
+      "id": "fn_meta",
+      "name": "Derive Basic Meta",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "{{ $env.WHISPER_CMD || 'whisper' }} --model {{ $env.WHISPER_MODEL || 'medium' }} --output_format vtt,txt --output_dir \"{{ $env.NN_TR_OUT || 'D:\\\\newsroom\\\\outputs\\\\assets\\\\transcripts' }}\" \"{{ $json.file }}\" "
+      },
+      "id": "exec_whisper",
+      "name": "Transcribe (whisper)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Locate transcript files based on the original filename base\nconst fp = $json.file;\nconst base = fp.replace(/\\.mp4$/i, '');\nconst toWin = s => s.replace(/\\//g,'\\\\');\nconst dir = (process.env.NN_TR_OUT || 'D:\\\\newsroom\\\\outputs\\\\assets\\\\transcripts');\nconst name = base.split(/\\\\|\\//).pop();\nconst vttPath = toWin(`${dir}\\\\${name}.vtt`);\nconst txtPath = toWin(`${dir}\\\\${name}.txt`);\n\nreturn [{\n  json: {\n    ...$json,\n    transcript: { vttPath, txtPath }\n  }\n}];\n"
+      },
+      "id": "fn_paths",
+      "name": "Locate Transcript Paths",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "filePath": "={{$json.transcript.txtPath}}",
+        "binaryPropertyName": "data"
+      },
+      "id": "read_txt",
+      "name": "Read Transcript (txt)",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "functionCode": "\n// Convert transcript .txt binary to string; naive segmentation for MVP\nconst buf = items[0].binary.data.data;\nconst text = Buffer.from(buf).toString('utf8');\n\n// Build a basic summary and key takeaway (heuristic)\nconst lines = text.split(/\\r?\\n/).map(l=>l.trim()).filter(Boolean);\nconst firstParas = lines.slice(0, 12).join(' ');\nconst keyTakeaway = firstParas.slice(0, 260) + (firstParas.length>260 ? '\u2026' : '');\nconst summary = lines.slice(0, 40).join(' ').slice(0, 600) + (lines.join(' ').length>600 ? '\u2026' : '');\n\n// Build rough Q&A blocks by grouping every ~8 lines\nconst qaBlocks = [];\nfor (let i=0; i<lines.length; i+=8) {\n  const chunk = lines.slice(i, i+8).join(' ');\n  qaBlocks.push({\n    question: `Topic ${1 + Math.floor(i/8)}`,\n    answers: [{ speaker: \"Guest\", text: chunk }]\n  });\n  if (qaBlocks.length>=8) break;\n}\n\nreturn [{\n  json: {\n    ...$json,\n    keyTakeaway,\n    summary,\n    qaBlocks\n  }\n}];\n"
+      },
+      "id": "fn_struct",
+      "name": "Summarize & Segment (heuristic)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Minimal host/guest linking via env or defaults\nconst hostName = process.env.NN_DEFAULT_HOST_NAME || 'Host';\nconst hostUrl  = process.env.NN_DEFAULT_HOST_URL  || '#';\nconst guests = [{ name: 'Guest', profileUrl: '#' }];\n\nconst topics = Array.from(new Set(($json.topic || '').toLowerCase().split(/\\s+/).filter(Boolean))).slice(0,6);\n\n// Build JSON-LD mainEntity from first few QA blocks\nconst mainEntity = ($json.qaBlocks || []).slice(0,5).map(b => ({\n  \"@type\": \"Question\",\n  \"name\": b.question,\n  \"acceptedAnswer\": {\n    \"@type\": \"Answer\",\n    \"text\": b.answers.map(a => `${a.speaker}: ${a.text}`).join(' ')\n  }\n}));\n\nconst pageUrlBase = process.env.NN_PUBLIC_BASE_URL || 'http://localhost';\nconst showSlug = ($json.show || 'show').toLowerCase().replace(/[^a-z0-9]+/g,'-');\nconst topicSlug = ($json.topic || 'interview').toLowerCase().replace(/[^a-z0-9]+/g,'-');\nconst slug = `/${showSlug}/${$json.episodeId}-${topicSlug}`;\n\nconst jsonLd = {\n  \"@context\": \"https://schema.org\",\n  \"@type\": \"NewsArticle\",\n  \"headline\": $json.title,\n  \"datePublished\": $json.publishDate,\n  \"author\": {\"@type\":\"Person\",\"name\":hostName,\"url\":hostUrl},\n  \"interviewee\": guests.map(g=>({\"@type\":\"Person\",\"name\":g.name,\"url\":g.profileUrl})),\n  \"keywords\": topics,\n  \"mainEntityOfPage\": pageUrlBase + slug + \"/\",\n  \"mainEntity\": mainEntity,\n  \"video\": {\n    \"@type\": \"VideoObject\",\n    \"url\": ($json.video && $json.video.embedUrl) || \"#\",\n    \"thumbnailUrl\": ($json.video && $json.video.thumbnailUrl) || \"\"\n  }\n};\n\nreturn [{\n  json: {\n    ...$json,\n    host: { name: hostName, profileUrl: hostUrl },\n    guests,\n    topics,\n    slug,\n    jsonLd\n  }\n}];\n"
+      },
+      "id": "fn_jsonld",
+      "name": "Build JSON-LD & Slug",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "\nfunction esc(s){ return (s||'').toString(); }\nconst jsonLdStr = JSON.stringify($json.jsonLd, null, 2);\n\nconst qaHtml = ($json.qaBlocks||[]).map((b,i)=>`\n<section id=\"q${i+1}\">\n  <h3>${esc(b.question)}</h3>\n  ${b.answers.map(a=>`<p><strong>${esc(a.speaker)}:</strong> ${esc(a.text)}</p>`).join('\\n')}\n</section>`).join('\\n');\n\nconst guestsHtml = ($json.guests||[]).map(g=>`<li><a href=\"${esc(g.profileUrl||'#')}\">${esc(g.name)}</a></li>`).join('');\n\nconst transcriptLinks = `\n<p>${$json.transcript?.txtPath ? `<a href=\"${esc($json.transcript.txtPath)}\">Download Transcript (.txt)</a>` : ''}</p>\n<p>${$json.transcript?.vttPath ? `<a href=\"${esc($json.transcript.vttPath)}\">Download Transcript (.vtt)</a>` : ''}</p>`;\n\nconst videoEmbed = ($json.video && $json.video.embedUrl) ?\n  `<iframe src=\"${esc($json.video.embedUrl)}\" width=\"800\" height=\"450\" allowfullscreen></iframe>` :\n  '';\n\nconst html = `<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\" />\n<title>${esc($json.title)}</title>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n<script type=\"application/ld+json\">\n${jsonLdStr}\n</script>\n</head>\n<body>\n  <article>\n    <h1>${esc($json.title)}</h1>\n    <p><strong>Key Takeaway:</strong> ${esc($json.keyTakeaway)}</p>\n\n    <h2>Summary</h2>\n    <p>${esc($json.summary)}</p>\n\n    <h2>Interview Transcript (Segmented)</h2>\n    ${qaHtml}\n\n    <h2>About the Interviewer & Guests</h2>\n    <ul>\n      <li><a href=\"${esc($json.host?.profileUrl || '#')}\">${esc($json.host?.name || 'Host')}</a></li>\n      ${guestsHtml}\n    </ul>\n\n    <h2>Original Video / Media</h2>\n    ${videoEmbed}\n    ${transcriptLinks}\n  </article>\n</body>\n</html>`;\n\nreturn [{ json: { ...$json, html } }];\n"
+      },
+      "id": "fn_html",
+      "name": "Render HTML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        2450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fileName": "={{(process.env.NN_PAGES || 'D:\\\\newsroom\\\\outputs\\\\pages') + $json.slug + '\\\\index.html'}}",
+        "fileContent": "={{$json.html}}",
+        "options": {}
+      },
+      "id": "write_html",
+      "name": "Write HTML to Disk",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        2700,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Cron (every 10 min)": {
+      "main": [
+        [
+          {
+            "node": "List New Videos (local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List New Videos (local)": {
+      "main": [
+        [
+          {
+            "node": "Split to Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split to Items": {
+      "main": [
+        [
+          {
+            "node": "Derive Basic Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Derive Basic Meta": {
+      "main": [
+        [
+          {
+            "node": "Transcribe (whisper)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe (whisper)": {
+      "main": [
+        [
+          {
+            "node": "Locate Transcript Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Locate Transcript Paths": {
+      "main": [
+        [
+          {
+            "node": "Read Transcript (txt)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Transcript (txt)": {
+      "main": [
+        [
+          {
+            "node": "Summarize & Segment (heuristic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize & Segment (heuristic)": {
+      "main": [
+        [
+          {
+            "node": "Build JSON-LD & Slug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build JSON-LD & Slug": {
+      "main": [
+        [
+          {
+            "node": "Render HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render HTML": {
+      "main": [
+        [
+          {
+            "node": "Write HTML to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

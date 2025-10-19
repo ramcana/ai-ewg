@@ -1,0 +1,86 @@
+# Video Processing Pipeline Configuration
+# This file defines the default configuration for the pipeline
+
+# Video source directories
+sources:
+  - path: "D:/newsroom/videos"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: ["*temp*", "*processing*"]
+    enabled: false
+  - path: "D:/n8n/ai-ewg/test_videos/newsroom/2024"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+
+# Staging area for temporary files
+staging:
+  enabled: true
+  path: "staging"
+  cleanup_after_processing: true
+
+# Video discovery settings (optimized for high-end system)
+discovery:
+  stability_minutes: 5
+  max_concurrent_scans: 16 # Leverage more cores for scanning
+  scan_interval_seconds: 300
+
+# AI model configuration (optimized for RTX 4080)
+models:
+  whisper: "large-v3" # Use the best model with your GPU
+  llm: "mistral"
+  diarization_device: "cuda"
+  num_speakers: 2
+
+# Ollama configuration for AI enrichment
+ollama:
+  enabled: true
+  host: "http://localhost:11434"
+  model: "llama3.1:latest"  # Best model for news analysis
+  timeout: 300  # 5 minutes for AI generation
+  
+# Enrichment configuration
+enrichment:
+  ollama_enabled: true
+  summary_max_tokens: 500
+  takeaways_count: 7
+  topics_count: 10
+  segment_chunk_size: 10  # Lines per segment
+
+# Confidence thresholds
+thresholds:
+  confidence_min: 0.6
+  entity_confidence: 0.7
+  expert_score: 0.75
+  publish_score: 0.6
+
+# Database configuration
+database:
+  path: "data/pipeline.db"
+  backup_enabled: true
+  backup_interval_hours: 24
+
+# Logging configuration
+logging:
+  level: "INFO"
+  directory: "logs"
+  max_file_size_mb: 10
+  backup_count: 5
+  console: true
+  structured: true
+
+# Processing limits and concurrency (optimized for Threadripper PRO 5995WX)
+processing:
+  max_concurrent_episodes: 4 # Start conservative, can increase later
+  max_retry_attempts: 3
+  retry_delay_seconds: 30
+  timeout_minutes: 120
+
+# Resource limits (optimized for high-end workstation)
+resources:
+  max_memory_percent: 95.0 # 128GB allows very high usage
+  max_cpu_percent: 95.0 # 64 cores can handle very high load
+  max_disk_usage_percent: 95.0
+  max_open_files: 4000
+
+# API rate limiting
+api_rate_limit_delay: 0.5

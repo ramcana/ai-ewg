@@ -1,0 +1,276 @@
+{
+  "name": "Configurable Video Processing v2",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "folder-path-field",
+              "name": "folder_path",
+              "value": "D:/n8n/ai-ewg/test_videos/newsroom/2024",
+              "type": "string"
+            },
+            {
+              "id": "target-stage-field",
+              "name": "target_stage",
+              "value": "rendered",
+              "type": "string"
+            },
+            {
+              "id": "force-reprocess-field",
+              "name": "force_reprocess",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-config",
+      "name": "Set Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300],
+      "notes": "Configure Processing:\n\nfolder_path: Path to video folder\ntarget_stage: discovered, prepped, transcribed, enriched, rendered\nforce_reprocess: Set true to reprocess existing videos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $input.first().json;\nconst folderPath = config.folder_path;\nconst targetStage = config.target_stage;\nconst forceReprocess = config.force_reprocess;\n\nconst videoFiles = [\n  'BB580.mp4',\n  'CI166.mp4',\n  'CJ335.mp4',\n  'CP557.mp4',\n  'EMP140.mp4',\n  'MG096.mp4',\n  'OSS096.mp4',\n  'SL031.mp4'\n];\n\nconst episodes = videoFiles.map(filename => {\n  const baseName = filename.replace(/\\.[^/.]+$/, '');\n  const episodeId = 'newsroom-2024-' + baseName.toLowerCase().replace(/[^a-z0-9]/g, '-');\n  \n  return {\n    filename: filename,\n    full_path: folderPath + '/' + filename,\n    episode_id: episodeId,\n    base_name: baseName,\n    target_stage: targetStage,\n    force_reprocess: forceReprocess\n  };\n});\n\nreturn episodes;"
+      },
+      "id": "prepare-episodes",
+      "name": "Prepare Episodes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.docker.internal:8000/episodes/{{ $json.episode_id }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "check-episode-status",
+      "name": "Check Episode Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300],
+      "continueOnFail": true,
+      "notes": "30 second timeout for status check"
+    },
+    {
+      "parameters": {
+        "jsCode": "const episodeData = $('Prepare Episodes').item.json;\nconst statusResponse = $input.item.json;\n\nconst stages = ['discovered', 'prepped', 'transcribed', 'enriched', 'rendered'];\n\nlet currentStage = 'discovered';\nlet needsProcessing = true;\n\nif (statusResponse && statusResponse.episode_id) {\n  currentStage = statusResponse.stage || 'discovered';\n  \n  const currentIndex = stages.indexOf(currentStage);\n  const targetIndex = stages.indexOf(episodeData.target_stage);\n  \n  if (currentIndex >= targetIndex && !episodeData.force_reprocess) {\n    needsProcessing = false;\n  }\n}\n\nreturn {\n  episode_id: episodeData.episode_id,\n  filename: episodeData.filename,\n  full_path: episodeData.full_path,\n  target_stage: episodeData.target_stage,\n  force_reprocess: episodeData.force_reprocess,\n  current_stage: currentStage,\n  needs_processing: needsProcessing,\n  status_checked: true\n};"
+      },
+      "id": "prepare-for-processing",
+      "name": "Prepare for Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.needs_processing }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "filter-needs-processing",
+      "name": "Filter: Needs Processing",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-in-batches",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/episodes/process",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"episode_id\": $input.item.json.episode_id,\n  \"target_stage\": $input.item.json.target_stage,\n  \"force_reprocess\": $input.item.json.force_reprocess\n}) }}",
+        "options": {
+          "timeout": 1800000
+        }
+      },
+      "id": "process-episode",
+      "name": "Process Episode",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1700, 300],
+      "notes": "30 minute timeout for full processing with AI enrichment\n\nProcessing breakdown:\n- Transcription (Whisper): 5-7 min\n- AI Enrichment (Ollama): 8-12 min\n- HTML Generation: <1 min\n\nTotal: ~15-20 min per video\n\nTimeout set to 30 min (1800000ms) for safety margin"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the processing result from Process Episode node\nconst result = $input.item.json;\n\n// All episode info should be in the result already\nreturn {\n  success: result.success || false,\n  episode_id: result.episode_id,\n  stage: result.stage || 'unknown',\n  duration: result.duration || 0,\n  error: result.error || null,\n  metrics: result.metrics || null\n};"
+      },
+      "id": "log-result",
+      "name": "Log Processing Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allResults = $input.all();\nconst successful = allResults.filter(item => item.json.success === true);\nconst failed = allResults.filter(item => item.json.success !== true);\nconst totalDuration = successful.reduce((sum, item) => sum + (item.json.duration || 0), 0);\nconst avgDuration = successful.length > 0 ? totalDuration / successful.length : 0;\nconst config = $('Set Configuration').first().json;\n\nconst summary = {\n  summary_type: 'workflow_completion',\n  configuration: {\n    folder_path: config.folder_path,\n    target_stage: config.target_stage,\n    force_reprocess: config.force_reprocess\n  },\n  results: {\n    total_videos: allResults.length,\n    successful: successful.length,\n    failed: failed.length,\n    success_rate: ((successful.length / allResults.length) * 100).toFixed(1) + '%'\n  },\n  timing: {\n    total_duration: totalDuration.toFixed(2) + 's',\n    avg_duration: avgDuration.toFixed(2) + 's'\n  },\n  processed_episodes: successful.map(item => ({\n    episode_id: item.json.episode_id,\n    filename: item.json.filename,\n    stage: item.json.stage,\n    duration: item.json.duration\n  })),\n  failed_episodes: failed.map(item => ({\n    episode_id: item.json.episode_id,\n    filename: item.json.filename,\n    error_message: item.json.error\n  })),\n  timestamp: new Date().toISOString()\n};\n\nreturn [...allResults, { json: summary }];"
+      },
+      "id": "final-summary",
+      "name": "Final Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Configuration": {
+      "main": [
+        [
+          {
+            "node": "Prepare Episodes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Episodes": {
+      "main": [
+        [
+          {
+            "node": "Check Episode Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Episode Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare for Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for Processing": {
+      "main": [
+        [
+          {
+            "node": "Filter: Needs Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Needs Processing": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "Process Episode",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Episode": {
+      "main": [
+        [
+          {
+            "node": "Log Processing Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Processing Result": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-19T04:03:00.000Z",
+  "versionId": "v2"
+}

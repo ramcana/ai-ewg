@@ -1,0 +1,190 @@
+{
+  "name": "AI-Ready: Video Processing with Validation",
+  "active": false,
+  "settings": {},
+  "id": "27b4b1e2-3955-4121-902d-83f25a6af3c9",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "unit": "minutes",
+              "value": 10
+            }
+          ]
+        }
+      },
+      "id": "cron1",
+      "name": "Cron (every 10 min)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "command": "powershell -Command \"Get-ChildItem -Path '{{ $env.NN_INBOX || \"D:\\\\newsroom\\\\inbox\\\\videos\" }}' -Filter *.mp4 -File | Select-Object -ExpandProperty FullName\" "
+      },
+      "id": "exec_list",
+      "name": "List New Videos (local)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "\nconst stdout = $json.stdout || '';\nconst lines = stdout.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);\nreturn lines.map(file => ({json: { file }}));\n"
+      },
+      "id": "fn_split",
+      "name": "Split to Items",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Derive basic metadata from filename convention:\n// Example: MyGeneration_S02E07_2025-10-16_AI-in-Industry.mp4\nconst path = $json.file;\nconst bn = path.split(/\\\\|\\//).pop();\nconst base = bn.replace(/\\.mp4$/i, '');\nlet show='', episodeId='', publishDate='', topic='';\nconst parts = base.split('_');\nif (parts.length >= 4) {\n  show = parts[0];\n  episodeId = parts[1];\n  publishDate = parts[2];\n  topic = parts.slice(3).join(' ').replace(/[-_]/g,' ');\n} else {\n  show = parts[0] || 'Show';\n  episodeId = parts[1] || 'E01';\n  publishDate = parts[2] || new Date().toISOString().slice(0,10);\n  topic = parts.slice(3).join(' ') || 'Interview';\n}\nconst title = `Interview: ${topic} | ${show}`;\nreturn [{\n  json: {\n    file: path,\n    show, episodeId, publishDate, topic, title\n  }\n}];\n"
+      },
+      "id": "fn_meta",
+      "name": "Derive Basic Meta",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [950, 300]
+    },
+    {
+      "parameters": {
+        "command": "{{ $env.WHISPER_CMD || 'whisper' }} --model {{ $env.WHISPER_MODEL || 'medium' }} --output_format vtt,txt --output_dir \"{{ $env.NN_TR_OUT || 'D:\\\\newsroom\\\\outputs\\\\assets\\\\transcripts' }}\" \"{{ $json.file }}\" "
+      },
+      "id": "exec_whisper",
+      "name": "Transcribe (whisper)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Locate transcript files based on the original filename base\nconst fp = $json.file;\nconst base = fp.replace(/\\.mp4$/i, '');\nconst toWin = s => s.replace(/\\//g,'\\\\');\nconst dir = (process.env.NN_TR_OUT || 'D:\\\\newsroom\\\\outputs\\\\assets\\\\transcripts');\nconst name = base.split(/\\\\|\\//).pop();\nconst vttPath = toWin(`${dir}\\\\${name}.vtt`);\nconst txtPath = toWin(`${dir}\\\\${name}.txt`);\n\nreturn [{\n  json: {\n    ...$json,\n    transcript: { vttPath, txtPath }\n  }\n}];\n"
+      },
+      "id": "fn_paths",
+      "name": "Locate Transcript Paths",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "filePath": "={{$json.transcript.txtPath}}",
+        "binaryPropertyName": "data"
+      },
+      "id": "read_txt",
+      "name": "Read Transcript (txt)",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [1700, 300]
+    },
+    {
+      "parameters": {
+        "options": {},
+        "functionCode": "\n// Convert transcript .txt binary to string; add speaker labels\nconst buf = items[0].binary.data.data;\nconst text = Buffer.from(buf).toString('utf8');\n\n// Add speaker labels to transcript (simple heuristic)\nconst lines = text.split(/\\r?\\n/).map(l=>l.trim()).filter(Boolean);\nconst labeledTranscript = lines.map((line, i) => {\n  const speaker = i % 2 === 0 ? 'Host' : 'Guest';\n  return `${speaker}: ${line}`;\n}).join('\\n');\n\n// Build a basic summary and key takeaway (heuristic)\nconst firstParas = lines.slice(0, 12).join(' ');\nconst keyTakeaway = firstParas.slice(0, 260) + (firstParas.length>260 ? '…' : '');\nconst summary = lines.slice(0, 40).join(' ').slice(0, 600) + (lines.join(' ').length>600 ? '…' : '');\n\n// Build rough Q&A blocks by grouping every ~8 lines with clear labels\nconst qaBlocks = [];\nfor (let i=0; i<lines.length; i+=8) {\n  const chunk = lines.slice(i, i+8).join(' ');\n  qaBlocks.push({\n    question: `Q${1 + Math.floor(i/8)}: ${chunk.slice(0, 80)}...`,\n    answers: [{ speaker: \"Guest\", text: chunk }]\n  });\n  if (qaBlocks.length>=8) break;\n}\n\nreturn [{\n  json: {\n    ...$json,\n    labeledTranscript,\n    keyTakeaway,\n    summary,\n    qaBlocks\n  }\n}];\n"
+      },
+      "id": "fn_struct",
+      "name": "Summarize & Segment (heuristic)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1950, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// Load catalog data for host/guest profiles\nconst fs = require('fs');\nconst catalogDir = process.env.NN_CATALOG || 'D:\\\\newsroom\\\\catalog';\n\n// Default values\nlet hostName = process.env.NN_DEFAULT_HOST_NAME || 'Host';\nlet hostUrl  = process.env.NN_DEFAULT_HOST_URL  || '#';\nlet guests = [{ name: 'Guest', profileUrl: '#' }];\nlet relatedLinks = [];\nlet citations = [];\n\n// Try to load shows.yaml for host info\ntry {\n  const showsPath = `${catalogDir}\\\\shows.yaml`;\n  if (fs.existsSync(showsPath)) {\n    // Simple YAML parsing for show lookup\n    const showsContent = fs.readFileSync(showsPath, 'utf8');\n    // This is a simplified parser - in production use js-yaml\n    const showMatch = showsContent.match(new RegExp(`id:\\\\s*${$json.show.toLowerCase()}[\\\\s\\\\S]*?name:\\\\s*\"([^\"]+)\"[\\\\s\\\\S]*?profileUrl:\\\\s*\"([^\"]+)\"`, 'i'));\n    if (showMatch) {\n      hostName = showMatch[1];\n      hostUrl = showMatch[2];\n    }\n  }\n} catch (e) {\n  console.log('Could not load shows catalog:', e.message);\n}\n\n// Try to load guests.yaml\ntry {\n  const guestsPath = `${catalogDir}\\\\guests.yaml`;\n  if (fs.existsSync(guestsPath)) {\n    // Simplified guest lookup\n    const guestsContent = fs.readFileSync(guestsPath, 'utf8');\n    // Extract first guest as example\n    const guestMatch = guestsContent.match(/name:\\s*\"([^\"]+)\"[\\s\\S]*?profileUrl:\\s*\"([^\"]+)\"/);\n    if (guestMatch) {\n      guests = [{ name: guestMatch[1], profileUrl: guestMatch[2] }];\n    }\n  }\n} catch (e) {\n  console.log('Could not load guests catalog:', e.message);\n}\n\n// Try to load related.yaml for topic-based links\ntry {\n  const relatedPath = `${catalogDir}\\\\related.yaml`;\n  if (fs.existsSync(relatedPath)) {\n    const relatedContent = fs.readFileSync(relatedPath, 'utf8');\n    // Simple extraction of links related to topic keywords\n    const topicKeywords = ($json.topic || '').toLowerCase().split(/\\s+/);\n    const linkMatches = relatedContent.matchAll(/title:\\s*\"([^\"]+)\"[\\s\\S]*?url:\\s*\"([^\"]+)\"/g);\n    for (const match of linkMatches) {\n      relatedLinks.push({ title: match[1], url: match[2] });\n      if (relatedLinks.length >= 5) break;\n    }\n  }\n} catch (e) {\n  console.log('Could not load related links:', e.message);\n}\n\n// Try to load citations.yaml\ntry {\n  const citationsPath = `${catalogDir}\\\\citations.yaml`;\n  if (fs.existsSync(citationsPath)) {\n    const citationsContent = fs.readFileSync(citationsPath, 'utf8');\n    const citationMatches = citationsContent.matchAll(/title:\\s*\"([^\"]+)\"[\\s\\S]*?url:\\s*\"([^\"]+)\"/g);\n    for (const match of citationMatches) {\n      citations.push({ title: match[1], url: match[2] });\n      if (citations.length >= 3) break;\n    }\n  }\n} catch (e) {\n  console.log('Could not load citations:', e.message);\n}\n\nconst topics = Array.from(new Set(($json.topic || '').toLowerCase().split(/\\s+/).filter(Boolean))).slice(0,6);\n\n// Build JSON-LD mainEntity from QA blocks\nconst mainEntity = ($json.qaBlocks || []).slice(0,5).map(b => ({\n  \"@type\": \"Question\",\n  \"name\": b.question,\n  \"acceptedAnswer\": {\n    \"@type\": \"Answer\",\n    \"text\": b.answers.map(a => `${a.speaker}: ${a.text}`).join(' ')\n  }\n}));\n\nconst pageUrlBase = process.env.NN_PUBLIC_BASE_URL || 'http://localhost';\nconst showSlug = ($json.show || 'show').toLowerCase().replace(/[^a-z0-9]+/g,'-');\nconst topicSlug = ($json.topic || 'interview').toLowerCase().replace(/[^a-z0-9]+/g,'-');\nconst slug = `/${showSlug}/${$json.episodeId}-${topicSlug}`;\n\nconst jsonLd = {\n  \"@context\": \"https://schema.org\",\n  \"@type\": \"NewsArticle\",\n  \"headline\": $json.title,\n  \"datePublished\": $json.publishDate,\n  \"author\": {\"@type\":\"Person\",\"name\":hostName,\"url\":hostUrl},\n  \"interviewee\": guests.map(g=>({\"@type\":\"Person\",\"name\":g.name,\"url\":g.profileUrl})),\n  \"keywords\": topics,\n  \"mainEntityOfPage\": pageUrlBase + slug + \"/\",\n  \"mainEntity\": mainEntity,\n  \"video\": {\n    \"@type\": \"VideoObject\",\n    \"url\": ($json.video && $json.video.embedUrl) || \"#\",\n    \"thumbnailUrl\": ($json.video && $json.video.thumbnailUrl) || \"\"\n  },\n  \"citation\": citations.map(c => ({\"@type\": \"CreativeWork\", \"name\": c.title, \"url\": c.url}))\n};\n\nreturn [{\n  json: {\n    ...$json,\n    host: { name: hostName, profileUrl: hostUrl },\n    guests,\n    topics,\n    slug,\n    jsonLd,\n    relatedLinks,\n    citations\n  }\n}];\n"
+      },
+      "id": "fn_jsonld",
+      "name": "Build JSON-LD & Catalog Lookup",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "\nfunction esc(s){ return (s||'').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;'); }\nconst jsonLdStr = JSON.stringify($json.jsonLd, null, 2);\n\nconst qaHtml = ($json.qaBlocks||[]).map((b,i)=>`\n<section id=\"q${i+1}\">\n  <h3>${esc(b.question)}</h3>\n  ${b.answers.map(a=>`<p><strong>${esc(a.speaker)}:</strong> ${esc(a.text)}</p>`).join('\\n')}\n</section>`).join('\\n');\n\nconst guestsHtml = ($json.guests||[]).map(g=>`<li><a href=\"${esc(g.profileUrl||'#')}\">${esc(g.name)}</a></li>`).join('');\n\nconst relatedLinksHtml = ($json.relatedLinks||[]).length > 0 ? `\n<h2>Related Links</h2>\n<ul>\n${($json.relatedLinks||[]).map(l=>`<li><a href=\"${esc(l.url)}\">${esc(l.title)}</a></li>`).join('\\n')}\n</ul>` : '';\n\nconst citationsHtml = ($json.citations||[]).length > 0 ? `\n<h2>Citations & Sources</h2>\n<ul>\n${($json.citations||[]).map(c=>`<li><a href=\"${esc(c.url)}\">${esc(c.title)}</a></li>`).join('\\n')}\n</ul>` : '';\n\nconst transcriptLinks = `\n<p>${$json.transcript?.txtPath ? `<a href=\"${esc($json.transcript.txtPath)}\">Download Transcript (.txt)</a>` : ''}</p>\n<p>${$json.transcript?.vttPath ? `<a href=\"${esc($json.transcript.vttPath)}\">Download Transcript (.vtt)</a>` : ''}</p>`;\n\nconst videoEmbed = ($json.video && $json.video.embedUrl) ?\n  `<iframe src=\"${esc($json.video.embedUrl)}\" width=\"800\" height=\"450\" allowfullscreen></iframe>` :\n  '';\n\nconst html = `<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\" />\n<title>${esc($json.title)}</title>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n<meta name=\"description\" content=\"${esc($json.keyTakeaway)}\" />\n<script type=\"application/ld+json\">\n${jsonLdStr}\n</script>\n<style>\nbody { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.6; }\nh1 { color: #1a1a1a; }\nh2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }\nh3 { color: #555; }\n.key-takeaway { background: #f0f7ff; border-left: 4px solid #0066cc; padding: 15px; margin: 20px 0; }\na { color: #0066cc; text-decoration: none; }\na:hover { text-decoration: underline; }\nsection { margin: 30px 0; }\n</style>\n</head>\n<body>\n  <article>\n    <h1>${esc($json.title)}</h1>\n    <div class=\"key-takeaway\">\n      <strong>Key Takeaway:</strong> ${esc($json.keyTakeaway)}\n    </div>\n\n    <h2>Summary</h2>\n    <p>${esc($json.summary)}</p>\n\n    <h2>Interview Transcript (Segmented)</h2>\n    ${qaHtml}\n\n    <h2>Full Transcript with Speaker Labels</h2>\n    <pre style=\"white-space: pre-wrap; background: #f5f5f5; padding: 15px; border-radius: 5px;\">${esc($json.labeledTranscript || 'Transcript not available')}</pre>\n\n    <h2>About the Interviewer & Guests</h2>\n    <ul>\n      <li><a href=\"${esc($json.host?.profileUrl || '#')}\">${esc($json.host?.name || 'Host')}</a></li>\n      ${guestsHtml}\n    </ul>\n\n    ${relatedLinksHtml}\n    ${citationsHtml}\n\n    <h2>Original Video / Media</h2>\n    ${videoEmbed}\n    ${transcriptLinks}\n  </article>\n</body>\n</html>`;\n\nreturn [{ json: { ...$json, html } }];\n"
+      },
+      "id": "fn_html",
+      "name": "Render HTML",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "\n// AI-Readiness Checklist Validation\nconst fs = require('fs');\n\nconst checklist = {\n  hasTranscript: false,\n  hasSpeakerLabels: false,\n  hasSummary: false,\n  hasKeyTakeaway: false,\n  hasMetadata: false,\n  hasHostLinks: false,\n  hasGuestLinks: false,\n  hasRelatedLinks: false,\n  hasCitations: false,\n  hasCleanUrl: false,\n  hasVideoEmbed: false\n};\n\nconst issues = [];\nconst warnings = [];\n\n// Check transcript\nif ($json.transcript && $json.transcript.txtPath) {\n  try {\n    if (fs.existsSync($json.transcript.txtPath)) {\n      checklist.hasTranscript = true;\n    } else {\n      issues.push('Transcript file not found at expected path');\n    }\n  } catch (e) {\n    issues.push('Could not verify transcript file');\n  }\n} else {\n  issues.push('No transcript path defined');\n}\n\n// Check speaker labels\nif ($json.labeledTranscript && $json.labeledTranscript.includes('Host:') && $json.labeledTranscript.includes('Guest:')) {\n  checklist.hasSpeakerLabels = true;\n} else {\n  warnings.push('Speaker labels may not be properly formatted');\n}\n\n// Check summary and key takeaway\nif ($json.summary && $json.summary.length > 50) {\n  checklist.hasSummary = true;\n} else {\n  issues.push('Summary is missing or too short (< 50 chars)');\n}\n\nif ($json.keyTakeaway && $json.keyTakeaway.length > 30) {\n  checklist.hasKeyTakeaway = true;\n} else {\n  issues.push('Key takeaway is missing or too short (< 30 chars)');\n}\n\n// Check metadata (JSON-LD)\nif ($json.jsonLd && $json.jsonLd['@type'] === 'NewsArticle') {\n  checklist.hasMetadata = true;\n} else {\n  issues.push('JSON-LD metadata is missing or invalid');\n}\n\n// Check host links\nif ($json.host && $json.host.profileUrl && $json.host.profileUrl !== '#') {\n  checklist.hasHostLinks = true;\n} else {\n  warnings.push('Host profile URL is not set (using placeholder)');\n}\n\n// Check guest links\nif ($json.guests && $json.guests.length > 0 && $json.guests[0].profileUrl !== '#') {\n  checklist.hasGuestLinks = true;\n} else {\n  warnings.push('Guest profile URLs are not set (using placeholders)');\n}\n\n// Check related links\nif ($json.relatedLinks && $json.relatedLinks.length > 0) {\n  checklist.hasRelatedLinks = true;\n} else {\n  warnings.push('No related links found in catalog');\n}\n\n// Check citations\nif ($json.citations && $json.citations.length > 0) {\n  checklist.hasCitations = true;\n} else {\n  warnings.push('No citations found in catalog');\n}\n\n// Check clean URL\nif ($json.slug && $json.slug.match(/^\\/[a-z0-9-]+\\/[a-z0-9-]+$/)) {\n  checklist.hasCleanUrl = true;\n} else {\n  issues.push('URL slug is not properly formatted');\n}\n\n// Check video embed (optional)\nif ($json.video && $json.video.embedUrl) {\n  checklist.hasVideoEmbed = true;\n} else {\n  warnings.push('No video embed URL configured (optional)');\n}\n\n// Calculate score\nconst totalChecks = Object.keys(checklist).length;\nconst passedChecks = Object.values(checklist).filter(v => v === true).length;\nconst score = Math.round((passedChecks / totalChecks) * 100);\n\n// Determine status\nlet status = 'READY';\nif (issues.length > 0) {\n  status = 'NEEDS_ATTENTION';\n}\nif (score < 60) {\n  status = 'NOT_READY';\n}\n\nconst report = {\n  episodeId: $json.episodeId,\n  title: $json.title,\n  status,\n  score,\n  checklist,\n  issues,\n  warnings,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    ...$json,\n    aiReadinessReport: report\n  }\n}];\n"
+      },
+      "id": "fn_checklist",
+      "name": "AI-Readiness Validation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2700, 300]
+    },
+    {
+      "parameters": {
+        "fileName": "={{(process.env.NN_PAGES || 'D:\\\\newsroom\\\\outputs\\\\pages') + $json.slug + '\\\\index.html'}}",
+        "fileContent": "={{$json.html}}",
+        "options": {}
+      },
+      "id": "write_html",
+      "name": "Write HTML to Disk",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [2950, 300]
+    },
+    {
+      "parameters": {
+        "fileName": "={{(process.env.NN_PAGES || 'D:\\\\newsroom\\\\outputs\\\\pages') + $json.slug + '\\\\ai-readiness-report.json'}}",
+        "fileContent": "={{JSON.stringify($json.aiReadinessReport, null, 2)}}",
+        "options": {}
+      },
+      "id": "write_report",
+      "name": "Write AI-Readiness Report",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [2950, 450]
+    }
+  ],
+  "connections": {
+    "Cron (every 10 min)": {
+      "main": [[{"node": "List New Videos (local)", "type": "main", "index": 0}]]
+    },
+    "List New Videos (local)": {
+      "main": [[{"node": "Split to Items", "type": "main", "index": 0}]]
+    },
+    "Split to Items": {
+      "main": [[{"node": "Derive Basic Meta", "type": "main", "index": 0}]]
+    },
+    "Derive Basic Meta": {
+      "main": [[{"node": "Transcribe (whisper)", "type": "main", "index": 0}]]
+    },
+    "Transcribe (whisper)": {
+      "main": [[{"node": "Locate Transcript Paths", "type": "main", "index": 0}]]
+    },
+    "Locate Transcript Paths": {
+      "main": [[{"node": "Read Transcript (txt)", "type": "main", "index": 0}]]
+    },
+    "Read Transcript (txt)": {
+      "main": [[{"node": "Summarize & Segment (heuristic)", "type": "main", "index": 0}]]
+    },
+    "Summarize & Segment (heuristic)": {
+      "main": [[{"node": "Build JSON-LD & Catalog Lookup", "type": "main", "index": 0}]]
+    },
+    "Build JSON-LD & Catalog Lookup": {
+      "main": [[{"node": "Render HTML", "type": "main", "index": 0}]]
+    },
+    "Render HTML": {
+      "main": [[{"node": "AI-Readiness Validation", "type": "main", "index": 0}]]
+    },
+    "AI-Readiness Validation": {
+      "main": [[
+        {"node": "Write HTML to Disk", "type": "main", "index": 0},
+        {"node": "Write AI-Readiness Report", "type": "main", "index": 0}
+      ]]
+    }
+  }
+}
