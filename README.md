@@ -2,22 +2,52 @@
 
 Transform your existing video library into web-ready content with full metadata, transcription, and AI-enhanced enrichment. This is **Part 1** of a two-part system that processes videos from discovery through web artifact generation.
 
+## 🚀 New: CLI-Based Pipeline (v0.2.0)
+
+The pipeline now features a **professional CLI** with SQLite state management, Windows-first design, and n8n integration.
+
+### Quick Start (CLI)
+
+```powershell
+# 1. Setup
+.\setup_cli.ps1
+
+# 2. Discover videos
+ai-ewg discover
+
+# 3. Run pipeline
+ai-ewg transcribe
+ai-ewg diarize
+ai-ewg enrich entities
+ai-ewg web build
+
+# 4. Check status
+ai-ewg db status
+```
+
+**📚 Documentation:**
+- **[UPGRADE_SUMMARY.md](UPGRADE_SUMMARY.md)** - What's new in v0.2.0
+- **[docs/QUICKSTART_CLI.md](docs/QUICKSTART_CLI.md)** - Detailed CLI usage
+- **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** - Migrate from scripts
+
+---
+
 ## Overview
 
 This pipeline takes videos from multiple sources (local drives, NAS shares, external drives) and generates:
 
 - High-quality transcripts with speaker identification
 - AI-enriched guest profiles with proficiency scores and verification badges
-- Web-ready HTML pages with embedded structured data
+- Web-ready HTML pages with embedded structured data (JSON-LD)
 - Complete metadata for future publishing and distribution
 
-## Quick Start
+## Quick Start (Legacy Scripts)
 
 1. **Setup Environment**
 
-   ```bash
+   ```powershell
    python -m venv venv
-   venv\Scripts\activate
+   .\venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    ```
 
@@ -25,16 +55,21 @@ This pipeline takes videos from multiple sources (local drives, NAS shares, exte
    Edit `config/system.yaml` to specify your video sources:
 
    ```yaml
-   sources:
-     - path: "C:\\Videos"
-       include: ["*.mp4", "*.mkv"]
-     - path: "\\\\NAS\\Shows"
-       include: ["*.mp4"]
+   source_paths:
+     - "D:\\Videos\\Newsroom"
+     - "E:\\Archive\\Shows"
+   file_patterns:
+     - "**/*.mp4"
+     - "**/*.mkv"
    ```
 
 3. **Run Processing Pipeline**
-   ```bash
-   python scripts/process_library.py
+   ```powershell
+   # Legacy approach
+   python discover_now.py
+   
+   # Or use new CLI
+   ai-ewg discover
    ```
 
 ## Processing Pipeline (10 Stages)

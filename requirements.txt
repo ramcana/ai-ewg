@@ -8,6 +8,14 @@ httpx>=0.27.0
 pyyaml>=6.0.1
 python-dotenv>=1.0.0
 
+# CLI Framework
+typer[all]>=0.12.0
+rich>=13.7.0
+
+# Settings Management
+pydantic>=2.5.0
+pydantic-settings>=2.3.0
+
 # Transcription
 openai-whisper>=20231117
 faster-whisper>=1.0.0
@@ -23,12 +31,14 @@ pillow>=10.0.0
 # Database
 sqlalchemy>=2.0.0
 aiosqlite>=0.19.0
+sqlmodel>=0.0.21  # SQLAlchemy + Pydantic integration
 
 # Web & API
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
-pydantic>=2.5.0
 jinja2>=3.1.0
+requests>=2.32.0
+requests-cache>=1.2.0  # Entity disambiguation caching
 
 # Logging & Monitoring
 structlog>=24.1.0
@@ -41,7 +51,6 @@ pytest-cov>=4.1.0
 
 # Utilities
 tqdm>=4.66.0
-click>=8.1.7
 
 # Optional: Speaker Diarization (Phase 2)
 # pyannote.audio>=3.0.0  # Requires HuggingFace token

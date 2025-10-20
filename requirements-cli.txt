@@ -1,0 +1,15 @@
+# CLI and Core Dependencies
+typer[all]==0.12.3
+rich==13.7.1
+pydantic==2.8.2
+pydantic-settings==2.3.4
+sqlmodel==0.0.21
+pyyaml==6.0.1
+requests==2.32.3
+requests-cache==1.2.1
+
+# Jinja2 for templates
+jinja2==3.1.4
+
+# Logging
+python-json-logger==2.0.7

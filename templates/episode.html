@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ episode.title }} - {{ episode.show }} - {{ site_name }}{% endblock %}
+{% block description %}{{ episode.description|truncate(160) }}{% endblock %}
+
+{% block og_title %}{{ episode.title }} - {{ episode.show }}{% endblock %}
+{% block og_description %}{{ episode.description|truncate(200) }}{% endblock %}
+{% block og_type %}video.episode{% endblock %}
+{% block og_url %}/shows/{{ episode.show_slug }}/{{ episode.episode_id }}.html{% endblock %}
+
+{% block og_extra %}
+{% if episode.thumbnail %}
+<meta property="og:image" content="{{ site_url }}{{ episode.thumbnail }}">
+{% endif %}
+{% if episode.duration_seconds %}
+<meta property="video:duration" content="{{ episode.duration_seconds|int }}">
+{% endif %}
+{% endblock %}
+
+{% block jsonld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  "name": "{{ episode.title }}",
+  "description": "{{ episode.description }}",
+  "uploadDate": "{{ episode.date.isoformat() }}",
+  "duration": "PT{{ episode.duration_seconds|int }}S",
+  "thumbnailUrl": "{{ site_url }}{{ episode.thumbnail }}",
+  "contentUrl": "{{ episode.video_url }}",
+  "embedUrl": "{{ episode.embed_url }}",
+  "partOfSeries": {
+    "@type": "TVSeries",
+    "name": "{{ episode.show }}"
+  },
+  "actor": [
+    {% for person in episode.people %}
+    {
+      "@type": "Person",
+      "name": "{{ person.name }}"{% if person.wikidata_id %},
+      "sameAs": "https://www.wikidata.org/wiki/{{ person.wikidata_id }}"{% endif %}{% if person.wikipedia_url %},
+      "url": "{{ person.wikipedia_url }}"{% endif %}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ],
+  "transcript": {
+    "@type": "WebPageElement",
+    "text": "{{ episode.transcript_excerpt|truncate(500) }}"
+  }
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<article class="episode">
+    <div class="container">
+        <header class="episode-header">
+            <div class="breadcrumb">
+                <a href="/">Home</a> / 
+                <a href="/shows/{{ episode.show_slug }}">{{ episode.show }}</a> / 
+                <span>{{ episode.title }}</span>
+            </div>
+            
+            <h1>{{ episode.title }}</h1>
+            
+            <div class="episode-meta">
+                <time datetime="{{ episode.date.isoformat() }}">
+                    {{ episode.date.strftime('%B %d, %Y') }}
+                </time>
+                {% if episode.duration_seconds %}
+                <span class="duration">{{ episode.duration_seconds|format_duration }}</span>
+                {% endif %}
+            </div>
+        </header>
+        
+        {% if episode.thumbnail %}
+        <div class="episode-thumbnail">
+            <img src="{{ episode.thumbnail }}" alt="{{ episode.title }}">
+        </div>
+        {% endif %}
+        
+        <div class="episode-content">
+            <section class="episode-description">
+                <h2>About This Episode</h2>
+                <p>{{ episode.description }}</p>
+            </section>
+            
+            {% if episode.people %}
+            <section class="episode-people">
+                <h2>Featured People</h2>
+                <ul class="people-list">
+                    {% for person in episode.people %}
+                    <li class="person-card">
+                        <h3>
+                            {% if person.profile_url %}
+                            <a href="{{ person.profile_url }}">{{ person.name }}</a>
+                            {% else %}
+                            {{ person.name }}
+                            {% endif %}
+                        </h3>
+                        {% if person.role %}
+                        <span class="role">{{ person.role }}</span>
+                        {% endif %}
+                        {% if person.description %}
+                        <p class="bio">{{ person.description|truncate(200) }}</p>
+                        {% endif %}
+                        {% if person.wikipedia_url %}
+                        <a href="{{ person.wikipedia_url }}" class="external-link" target="_blank" rel="noopener">
+                            Wikipedia ↗
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </section>
+            {% endif %}
+            
+            {% if episode.topics %}
+            <section class="episode-topics">
+                <h2>Topics Discussed</h2>
+                <ul class="topic-tags">
+                    {% for topic in episode.topics %}
+                    <li><a href="/search?q={{ topic|urlencode }}">{{ topic }}</a></li>
+                    {% endfor %}
+                </ul>
+            </section>
+            {% endif %}
+            
+            {% if episode.transcript %}
+            <section class="episode-transcript">
+                <h2>Transcript</h2>
+                <div class="transcript-content">
+                    {{ episode.transcript|safe }}
+                </div>
+            </section>
+            {% endif %}
+        </div>
+    </div>
+</article>
+{% endblock %}

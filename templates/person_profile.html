@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{{ person.name }} - {{ site_name }}{% endblock %}
+{% block description %}{{ person.description|truncate(160) if person.description else person.name + ' - Appearances and episodes' }}{% endblock %}
+
+{% block jsonld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "{{ person.name }}"{% if person.wikidata_id %},
+  "sameAs": [
+    "https://www.wikidata.org/wiki/{{ person.wikidata_id }}"{% if person.wikipedia_url %},
+    "{{ person.wikipedia_url }}"{% endif %}
+  ]{% endif %}{% if person.description %},
+  "description": "{{ person.description }}"{% endif %}{% if person.occupation %},
+  "jobTitle": "{{ person.occupation }}"{% endif %}
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="person-profile">
+    <div class="container">
+        <header class="profile-header">
+            <h1>{{ person.name }}</h1>
+            
+            {% if person.occupation %}
+            <p class="occupation">{{ person.occupation }}</p>
+            {% endif %}
+            
+            {% if person.description %}
+            <p class="bio">{{ person.description }}</p>
+            {% endif %}
+            
+            <div class="external-links">
+                {% if person.wikipedia_url %}
+                <a href="{{ person.wikipedia_url }}" target="_blank" rel="noopener" class="external-link">
+                    Wikipedia ↗
+                </a>
+                {% endif %}
+                {% if person.wikidata_id %}
+                <a href="https://www.wikidata.org/wiki/{{ person.wikidata_id }}" target="_blank" rel="noopener" class="external-link">
+                    Wikidata ↗
+                </a>
+                {% endif %}
+            </div>
+        </header>
+        
+        <section class="appearances">
+            <h2>Appearances ({{ episodes|length }})</h2>
+            
+            <div class="episodes-list">
+                {% for episode in episodes %}
+                <article class="episode-item">
+                    <div class="episode-date">
+                        <time datetime="{{ episode.date.isoformat() }}">
+                            {{ episode.date.strftime('%b %d, %Y') }}
+                        </time>
+                    </div>
+                    
+                    <div class="episode-details">
+                        <h3>
+                            <a href="/shows/{{ episode.show_slug }}/{{ episode.episode_id }}.html">
+                                {{ episode.title }}
+                            </a>
+                        </h3>
+                        <p class="show-name">{{ episode.show }}</p>
+                        
+                        {% if episode.role %}
+                        <span class="role-badge">{{ episode.role }}</span>
+                        {% endif %}
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+        
+        {% if related_people %}
+        <section class="related-people">
+            <h2>Frequently Appeared With</h2>
+            <ul class="people-grid">
+                {% for related in related_people[:6] %}
+                <li>
+                    <a href="/hosts/{{ related.slug }}.html" class="person-card">
+                        <strong>{{ related.name }}</strong>
+                        <span class="count">{{ related.co_appearance_count }} episodes</span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}{{ show.name }} - All Episodes - {{ site_name }}{% endblock %}
+{% block description %}Browse all episodes of {{ show.name }}. {{ show.description|truncate(140) }}{% endblock %}
+
+{% block jsonld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TVSeries",
+  "name": "{{ show.name }}",
+  "description": "{{ show.description }}",
+  "numberOfEpisodes": {{ show.episode_count }},
+  "episode": [
+    {% for episode in episodes[:10] %}
+    {
+      "@type": "TVEpisode",
+      "name": "{{ episode.title }}",
+      "episodeNumber": {{ loop.index }},
+      "datePublished": "{{ episode.date.isoformat() }}",
+      "url": "{{ site_url }}/shows/{{ show.slug }}/{{ episode.episode_id }}.html"
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="show-index">
+    <div class="container">
+        <header class="show-header">
+            <h1>{{ show.name }}</h1>
+            <p class="show-description">{{ show.description }}</p>
+            <div class="show-stats">
+                <span>{{ show.episode_count }} episodes</span>
+            </div>
+        </header>
+        
+        <div class="episodes-grid">
+            {% for episode in episodes %}
+            <article class="episode-card">
+                {% if episode.thumbnail %}
+                <a href="/shows/{{ show.slug }}/{{ episode.episode_id }}.html" class="episode-thumbnail">
+                    <img src="{{ episode.thumbnail }}" alt="{{ episode.title }}">
+                </a>
+                {% endif %}
+                
+                <div class="episode-info">
+                    <h2>
+                        <a href="/shows/{{ show.slug }}/{{ episode.episode_id }}.html">
+                            {{ episode.title }}
+                        </a>
+                    </h2>
+                    
+                    <time datetime="{{ episode.date.isoformat() }}">
+                        {{ episode.date.strftime('%B %d, %Y') }}
+                    </time>
+                    
+                    {% if episode.description %}
+                    <p class="excerpt">{{ episode.description|truncate(150) }}</p>
+                    {% endif %}
+                    
+                    {% if episode.people %}
+                    <div class="episode-people">
+                        <span class="label">Featuring:</span>
+                        {% for person in episode.people[:3] %}
+                        <span class="person-tag">{{ person.name }}</span>
+                        {% endfor %}
+                        {% if episode.people|length > 3 %}
+                        <span class="more">+{{ episode.people|length - 3 }} more</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        
+        {% if pagination %}
+        <nav class="pagination">
+            {% if pagination.prev_page %}
+            <a href="?page={{ pagination.prev_page }}" class="prev">← Previous</a>
+            {% endif %}
+            <span class="current">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+            {% if pagination.next_page %}
+            <a href="?page={{ pagination.next_page }}" class="next">Next →</a>
+            {% endif %}
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

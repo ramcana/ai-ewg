@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ site_name }}{% endblock %}</title>
+    <meta name="description" content="{% block description %}{{ site_description }}{% endblock %}">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="{% block og_title %}{{ site_name }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ site_description }}{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:url" content="{{ site_url }}{% block og_url %}{% endblock %}">
+    {% block og_extra %}{% endblock %}
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="/assets/css/main.css">
+    {% block extra_css %}{% endblock %}
+    
+    <!-- JSON-LD Structured Data -->
+    {% block jsonld %}{% endblock %}
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="container">
+                <a href="/" class="logo">{{ site_name }}</a>
+                <ul class="nav-menu">
+                    <li><a href="/shows">Shows</a></li>
+                    <li><a href="/hosts">Hosts & Guests</a></li>
+                    <li><a href="/search">Search</a></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <div class="container">
+            <p>&copy; {{ current_year }} {{ site_name }}. Educational content archive.</p>
+            <ul class="footer-links">
+                <li><a href="/sitemap.xml">Sitemap</a></li>
+                <li><a href="/feeds/index.rss">RSS Feed</a></li>
+            </ul>
+        </div>
+    </footer>
+    
+    <!-- Scripts -->
+    <script src="/assets/js/main.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

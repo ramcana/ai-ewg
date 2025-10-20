@@ -6,6 +6,9 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = {text = "MIT"}
 
+[project.scripts]
+ai-ewg = "ai_ewg.cli:main_cli"
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"

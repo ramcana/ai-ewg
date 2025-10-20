@@ -1,0 +1,103 @@
+# AI-EWG System Configuration
+# Copy to system.yaml and customize for your environment
+
+# ============================================
+# Project Paths
+# ============================================
+project_root: D:\n8n\ai-ewg
+data_dir: D:\n8n\ai-ewg\data
+config_dir: D:\n8n\ai-ewg\config
+
+# ============================================
+# Source Discovery
+# ============================================
+source_paths:
+  - D:\Videos\Newsroom
+  - E:\Archive\Shows
+  # Add more source directories as needed
+
+file_patterns:
+  - "**/*.mp4"
+  - "**/*.mkv"
+  - "**/*.avi"
+  - "**/*.mov"
+
+exclude_patterns:
+  - "**/.*"           # Hidden files
+  - "**/__*"          # System folders
+  - "**/temp/**"      # Temp directories
+  - "**/backup/**"    # Backup directories
+
+# ============================================
+# Registry Database
+# ============================================
+registry_db_path: D:\n8n\ai-ewg\data\registry.db
+
+# ============================================
+# Logging
+# ============================================
+log_dir: D:\n8n\ai-ewg\data\logs
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+log_format: json  # json or text
+
+# ============================================
+# Transcription Settings (Stage 3)
+# ============================================
+transcription:
+  model: large-v3  # tiny, base, small, medium, large-v2, large-v3
+  compute_type: fp16  # fp16, int8, fp32
+  device: auto  # auto, cuda, cpu
+  language: null  # null for auto-detect, or 'en', 'es', etc.
+  beam_size: 5
+  vad_filter: true  # Voice Activity Detection
+  max_concurrent: 1  # Concurrent transcription jobs
+
+# ============================================
+# Diarization Settings (Stage 4)
+# ============================================
+diarization:
+  model: pyannote/speaker-diarization-3.1
+  min_speakers: null  # null for auto-detect
+  max_speakers: null  # null for auto-detect
+  hf_token: ${HF_TOKEN}  # HuggingFace token from .env
+
+# ============================================
+# Enrichment Settings (Stage 5)
+# ============================================
+enrichment:
+  # Entity Extraction
+  spacy_model: en_core_web_lg  # SpaCy model for NER
+  use_llm: false  # Use LLM for entity extraction (requires Ollama)
+  llm_model: null  # e.g., llama3.2:latest
+  
+  # Disambiguation
+  wikidata_enabled: true
+  wikipedia_enabled: true
+  cache_ttl_days: 30  # Cache entity lookups for 30 days
+  
+  # Rate Limiting
+  requests_per_second: 1.0  # API rate limit
+  max_retries: 3
+
+# ============================================
+# Web Generation Settings (Stage 9)
+# ============================================
+web:
+  template_dir: templates
+  output_dir: data/public
+  
+  # SEO Settings
+  site_name: AI-EWG
+  site_url: https://example.com
+  site_description: Educational video archive with AI-powered transcription and enrichment
+  
+  # Features
+  enable_search: true
+  enable_rss: true
+  enable_sitemap: true
+
+# ============================================
+# Performance Tuning
+# ============================================
+max_workers: 4  # Max worker threads for parallel processing
+chunk_size: 1000  # Batch processing chunk size
