@@ -51,6 +51,22 @@ test_videos/
 *.tmp
 *.temp
 *.log
+token.txt
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+*.cover
+test-results.xml
+*-report.json
+
+# CI/CD Artifacts
+.github/workflows/*.log
 
 # OS
 Thumbs.db

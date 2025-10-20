@@ -1,0 +1,164 @@
+[project]
+name = "ai-video-pipeline"
+version = "1.0.0"
+description = "AI-powered video processing pipeline with transcription, diarization, and enrichment"
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+# ========================================
+# Ruff Configuration (Linting & Formatting)
+# ========================================
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+indent-width = 4
+
+# Include/exclude patterns
+extend-exclude = [
+    "venv",
+    "env",
+    ".venv",
+    "data",
+    "logs",
+    "output",
+    "test_videos",
+    "__pycache__",
+    "*.pyc",
+]
+
+[tool.ruff.lint]
+# Enable specific rule sets
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "SIM",   # flake8-simplify
+    "RET",   # flake8-return
+    "ARG",   # flake8-unused-arguments
+    "PTH",   # flake8-use-pathlib
+]
+
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Function calls in argument defaults
+    "B904",   # Use `raise from` to specify exception cause
+    "ARG001", # Unused function argument (common in overrides)
+    "ARG002", # Unused method argument (common in overrides)
+    "N812",   # Lowercase imported as non-lowercase
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Unused imports in __init__.py
+"tests/*.py" = ["ARG", "S101"]  # Allow unused args and asserts in tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "utils"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+# ========================================
+# MyPy Configuration (Type Checking)
+# ========================================
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_optional = true
+
+# Ignore missing imports for third-party packages
+[[tool.mypy.overrides]]
+module = [
+    "faster_whisper.*",
+    "pyannote.*",
+    "speechbrain.*",
+    "ffmpeg.*",
+    "ollama.*",
+]
+ignore_missing_imports = true
+
+# ========================================
+# Bandit Configuration (Security)
+# ========================================
+[tool.bandit]
+exclude_dirs = ["tests", "venv", "env", ".venv"]
+skips = [
+    "B101",  # assert_used (common in tests)
+    "B601",  # paramiko_calls
+]
+
+# ========================================
+# Pytest Configuration
+# ========================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+markers = [
+    "gpu: Tests requiring GPU/CUDA support",
+    "cpu: Tests that run on CPU only",
+    "slow: Tests that take a long time",
+    "integration: Integration tests",
+    "unit: Unit tests",
+    "mock: Tests using mocked services",
+    "ollama: Tests requiring Ollama service",
+    "models: Tests requiring ML models",
+]
+
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+]
+
+# ========================================
+# Coverage Configuration
+# ========================================
+[tool.coverage.run]
+source = ["src", "utils"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/env/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]

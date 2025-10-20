@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+env/
+ENV/
+.venv
+
+# Runtime data
+data/
+logs/
+output/
+test_videos/
+
+# Configuration
+config/.env
+.env
+*.env
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.github/
+
+# CI/CD
+.github/
+*.md
+!README.md
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Test files
+tests/__pycache__/
+test_*.pyc
+htmlcov/
+.coverage
+coverage.xml
+.pytest_cache/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Temporary
+*.tmp
+*.temp
+*.log
+commit_msg.txt
+
+# OS
+.DS_Store
+Thumbs.db
