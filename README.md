@@ -2,33 +2,24 @@
 
 Transform your existing video library into web-ready content with full metadata, transcription, and AI-enhanced enrichment. This is **Part 1** of a two-part system that processes videos from discovery through web artifact generation.
 
-## 🚀 New: CLI-Based Pipeline (v0.2.0)
+## 🚀 Quick Start
 
-The pipeline now features a **professional CLI** with SQLite state management, Windows-first design, and n8n integration.
-
-### Quick Start (CLI)
-
+### Start API Server
 ```powershell
-# 1. Setup
-.\setup_cli.ps1
-
-# 2. Discover videos
-ai-ewg discover
-
-# 3. Run pipeline
-ai-ewg transcribe
-ai-ewg diarize
-ai-ewg enrich entities
-ai-ewg web build
-
-# 4. Check status
-ai-ewg db status
+cd D:\n8n\ai-ewg
+.\venv\Scripts\Activate.ps1
+python src/cli.py --config config/pipeline.yaml api --port 8000
 ```
 
+### Run n8n Workflow
+1. Import `n8n_workflows/video_processing_FIXED_v3.json`
+2. Set folder path: `/data/test_videos/newsroom/2024`
+3. Execute workflow
+
 **📚 Documentation:**
-- **[UPGRADE_SUMMARY.md](UPGRADE_SUMMARY.md)** - What's new in v0.2.0
-- **[docs/QUICKSTART_CLI.md](docs/QUICKSTART_CLI.md)** - Detailed CLI usage
-- **[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)** - Migrate from scripts
+- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Complete setup guide
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Common commands
+- **[docs/DEDUPLICATION_SYSTEM.md](docs/DEDUPLICATION_SYSTEM.md)** - Deduplication features
 
 ---
 
@@ -41,53 +32,22 @@ This pipeline takes videos from multiple sources (local drives, NAS shares, exte
 - Web-ready HTML pages with embedded structured data (JSON-LD)
 - Complete metadata for future publishing and distribution
 
-## Quick Start (Legacy Scripts)
+## Key Features
 
-1. **Setup Environment**
+✅ **Content-Based Deduplication** - SHA256 hashing prevents duplicate processing  
+✅ **Auto-Discovery** - Scans configured folders for videos  
+✅ **Automatic Backups** - Database backed up every 24 hours  
+✅ **Resume Processing** - Continue from any stage  
+✅ **n8n Integration** - Visual workflow automation  
+✅ **Error Handling** - Graceful failure recovery
 
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
+## Processing Stages
 
-2. **Configure Sources**
-   Edit `config/system.yaml` to specify your video sources:
-
-   ```yaml
-   source_paths:
-     - "D:\\Videos\\Newsroom"
-     - "E:\\Archive\\Shows"
-   file_patterns:
-     - "**/*.mp4"
-     - "**/*.mkv"
-   ```
-
-3. **Run Processing Pipeline**
-   ```powershell
-   # Legacy approach
-   python discover_now.py
-   
-   # Or use new CLI
-   ai-ewg discover
-   ```
-
-## Processing Pipeline (10 Stages)
-
-1. **Discovery & Config** - Find videos across all configured sources
-2. **Episode Normalization** - Parse filenames into structured episode data
-3. **Registry & Deduplication** - Track processing state, skip unchanged files
-4. **Media Preparation** - Extract audio, validate files
-5. **Transcription** - Generate text and VTT captions using Whisper
-6. **Intelligence Chain** - 4-step AI enrichment process:
-   - Speaker diarization (`utils/diarize.py`)
-   - Entity extraction (`utils/extract_entities.py`)
-   - Guest disambiguation (`utils/disambiguate.py`)
-   - Proficiency scoring (`utils/score_people.py`)
-7. **Editorial Layer** - Generate summaries, key takeaways, and tags
-8. **Web Artifacts** - Create HTML pages with embedded JSON-LD
-9. **Index Generation** - Build per-show and per-host indices
-10. **Reliability & Logging** - Comprehensive error handling and progress tracking
+1. **Discovered** - Video file found and registered
+2. **Prepped** - Audio extracted, file validated
+3. **Transcribed** - Speech-to-text with Whisper
+4. **Enriched** - AI analysis, entity extraction, speaker identification
+5. **Rendered** - HTML pages and web artifacts generated
 
 ## Project Structure
 
@@ -133,30 +93,37 @@ Each processed episode generates:
 - Plain text transcripts
 - VTT caption files with timestamps
 
-## Key Features
-
-**Multi-Source Discovery** - Process videos from local drives, network shares, external drives
-**AI-Enhanced Guests** - Automatic guest identification, Wikipedia/Wikidata enrichment, proficiency scoring
-**Verification Badges** - "Verified Expert", "Industry Leader", "Academic Authority" based on credentials
-**Idempotent Processing** - Skip unchanged files, resume interrupted processing
-**Web-Ready Output** - Complete HTML pages with structured data for SEO and accessibility
-
 ## Configuration
 
-Key settings in `config/system.yaml`:
+Edit `config/pipeline.yaml`:
 
-- Video source paths and file patterns
-- Whisper model size and LLM selection
-- Confidence thresholds for entity extraction
-- Staging and output directory paths
+```yaml
+sources:
+  - path: "/data/test_videos/newsroom/2024"
+    include: ["*.mp4", "*.mkv"]
+    enabled: true
 
-## Next Steps
+database:
+  path: "data/pipeline.db"
+  backup_enabled: true
+  backup_interval_hours: 24
+```
 
-This is Part 1 of the system. Part 2 will handle:
+## API Documentation
 
-- Publishing to live websites
-- RSS feed and sitemap generation
-- Platform integration (Google, Bing, Apple Podcasts, Perplexity)
-- Content distribution and syndication
+When API server is running: http://localhost:8000/docs
 
-See `PART1_PROCESSING_PLAN.md` for detailed implementation specifications.
+## Development
+
+```powershell
+# Run tests
+pytest
+
+# Check code
+pylint src/
+
+# Format code
+black src/
+```
+
+See `docs/architecture/` for system design details.

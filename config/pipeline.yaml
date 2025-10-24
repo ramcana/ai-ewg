@@ -11,6 +11,10 @@ sources:
     include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
     exclude: []
     enabled: true
+  - path: "/data/test_videos/newsroom/2024"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
 
 # Staging area for temporary files
 staging:

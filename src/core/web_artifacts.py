@@ -996,9 +996,10 @@ p {
         # Deep Analysis (AI-generated)
         if ai_analysis and ai_analysis.get('deep_analysis'):
             analysis_text = ai_analysis['deep_analysis']
+            formatted_analysis = self._format_markdown_text(analysis_text)
             sections.append(f'''<div class="analysis-box">
                 <h2 style="margin-top:0;">Deep Analysis</h2>
-                <p>{self._escape_html(analysis_text)}</p>
+                {formatted_analysis}
             </div>''')
         
         # Fallback to editorial content if no AI analysis
@@ -1109,9 +1110,11 @@ p {
             filename = Path(episode.source.path).name
             download_links.append(f'<a href="#" class="download-btn" onclick="alert(\'Video download: {filename}\')">Download Video</a>')
         
-        # Transcript files
-        download_links.append('<a href="transcript.txt" class="download-btn">Download Transcript</a>')
-        download_links.append('<a href="captions.vtt" class="download-btn">Download Captions</a>')
+        # Transcript files - use absolute paths to assets folder
+        transcript_path = f"/assets/transcripts/{episode.episode_id}.txt"
+        vtt_path = f"/assets/transcripts/{episode.episode_id}.vtt"
+        download_links.append(f'<a href="{transcript_path}" class="download-btn" download>Download Transcript</a>')
+        download_links.append(f'<a href="{vtt_path}" class="download-btn" download>Download Captions</a>')
         
         return f"""<section class="video-section">
             <h2>Video Content</h2>
@@ -1534,6 +1537,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 .replace(">", "&gt;")
                 .replace('"', "&quot;")
                 .replace("'", "&#x27;"))
+    
+    def _format_markdown_text(self, text: str) -> str:
+        """Format markdown-style text to HTML"""
+        if not text:
+            return ""
+        
+        # Split into paragraphs (double newline)
+        paragraphs = text.split('\n\n')
+        formatted_parts = []
+        
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            
+            # Check if it's a heading (starts with **)
+            if para.startswith('**') and '**' in para[2:]:
+                # Extract heading text
+                end_idx = para.index('**', 2)
+                heading = para[2:end_idx]
+                rest = para[end_idx+2:].strip()
+                
+                formatted_parts.append(f'<h3>{self._escape_html(heading)}</h3>')
+                if rest:
+                    formatted_parts.append(f'<p>{self._escape_html(rest)}</p>')
+            
+            # Check if it's a bullet list
+            elif para.startswith('*') or para.startswith('-'):
+                lines = para.split('\n')
+                list_items = []
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith('* ') or line.startswith('- '):
+                        list_items.append(f'<li>{self._escape_html(line[2:])}</li>')
+                if list_items:
+                    formatted_parts.append(f'<ul>{"".join(list_items)}</ul>')
+            
+            # Regular paragraph
+            else:
+                # Handle inline bold (**text**)
+                formatted = self._escape_html(para)
+                formatted_parts.append(f'<p>{formatted}</p>')
+        
+        return '\n'.join(formatted_parts)
     
     def _validate_artifacts(self, html_path: Path, json_path: Path) -> Dict[str, Any]:
         """Validate generated artifacts"""

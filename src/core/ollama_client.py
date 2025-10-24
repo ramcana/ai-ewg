@@ -168,8 +168,8 @@ class OllamaClient:
         """
         self.logger.info("Generating executive summary")
         
-        # Limit transcript length to avoid token limits
-        max_chars = 15000
+        # Limit transcript length to avoid token limits (increased for longer episodes)
+        max_chars = 50000  # ~10,000 words, supports up to 60-minute episodes
         truncated_transcript = transcript[:max_chars]
         if len(transcript) > max_chars:
             truncated_transcript += "... [transcript continues]"
@@ -192,12 +192,12 @@ Provide only the summary, no preamble."""
             count: Number of takeaways to extract
             
         Returns:
-            List of key takeaway strings
+            List of key takeaways
         """
         self.logger.info(f"Extracting {count} key takeaways")
         
-        # Limit transcript length
-        max_chars = 15000
+        # Limit transcript length (increased for longer episodes)
+        max_chars = 50000  # ~10,000 words, supports up to 60-minute episodes
         truncated_transcript = transcript[:max_chars]
         if len(transcript) > max_chars:
             truncated_transcript += "... [transcript continues]"
@@ -240,8 +240,8 @@ Provide only the list, no preamble or conclusion."""
         """
         self.logger.info("Generating deep analysis")
         
-        # Limit transcript length
-        max_chars = 15000
+        # Limit transcript length (increased for longer episodes)
+        max_chars = 50000  # ~10,000 words, supports up to 60-minute episodes
         truncated_transcript = transcript[:max_chars]
         if len(transcript) > max_chars:
             truncated_transcript += "... [transcript continues]"
@@ -333,19 +333,19 @@ Host name:"""
     
     def extract_topics(self, transcript: str, count: int = 10) -> List[str]:
         """
-        Extract key topics/keywords from transcript
+        Extract key topics from transcript
         
         Args:
             transcript: Full transcript text
             count: Number of topics to extract
             
         Returns:
-            List of topic strings
+            List of topics
         """
         self.logger.info(f"Extracting {count} topics")
         
-        # Limit transcript length
-        max_chars = 15000
+        # Limit transcript length (increased for longer episodes)
+        max_chars = 50000  # ~10,000 words, supports up to 60-minute episodes
         truncated_transcript = transcript[:max_chars]
         if len(transcript) > max_chars:
             truncated_transcript += "... [transcript continues]"

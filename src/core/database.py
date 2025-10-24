@@ -22,7 +22,7 @@ logger = get_logger('pipeline.database')
 
 
 class DatabaseConnection:
-    """Thread-safe database connection wrapper"""
+    """Thread-safe database connection wrapper with NullPool-like behavior"""
     
     def __init__(self, db_path: str, config: DatabaseConfig):
         self.db_path = db_path
@@ -30,6 +30,7 @@ class DatabaseConnection:
         self._local = threading.local()
         self._lock = threading.Lock()
         self._connection_count = 0
+        self._use_nullpool = True  # Close connections aggressively to avoid lock retention
         
     def get_connection(self) -> sqlite3.Connection:
         """Get thread-local database connection"""
@@ -42,15 +43,22 @@ class DatabaseConnection:
                     conn = sqlite3.connect(
                         self.db_path,
                         timeout=self.config.connection_timeout,
-                        check_same_thread=False
+                        check_same_thread=False,  # Allow connection sharing across threads
+                        isolation_level=None  # Autocommit mode, we'll manage transactions explicitly
                     )
                     
-                    # Configure connection
+                    # Configure connection with optimal SQLite settings
                     conn.row_factory = sqlite3.Row
+                    
+                    # Critical PRAGMAs for concurrency
                     conn.execute(f"PRAGMA journal_mode = {self.config.journal_mode}")
                     conn.execute(f"PRAGMA synchronous = {self.config.synchronous}")
+                    conn.execute(f"PRAGMA busy_timeout = {self.config.busy_timeout}")
+                    
+                    # Additional optimizations
                     conn.execute("PRAGMA foreign_keys = ON")
                     conn.execute("PRAGMA temp_store = MEMORY")
+                    conn.execute("PRAGMA cache_size = -64000")  # 64MB cache
                     
                     self._local.connection = conn
                     self._connection_count += 1
@@ -80,17 +88,64 @@ class DatabaseConnection:
                     self._local.connection = None
     
     @contextmanager
-    def transaction(self) -> Generator[sqlite3.Connection, None, None]:
-        """Context manager for database transactions"""
+    def transaction(self, max_retries: int = 5, retry_delay: float = 0.5, immediate: bool = True) -> Generator[sqlite3.Connection, None, None]:
+        """Context manager for database transactions with aggressive retry logic
+        
+        Args:
+            max_retries: Maximum number of retry attempts
+            retry_delay: Base delay between retries (exponential backoff applied)
+            immediate: If True, use BEGIN IMMEDIATE (exclusive lock). Default True for writes.
+        """
         conn = self.get_connection()
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            yield conn
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            logger.error("Database transaction rolled back", error=str(e))
-            raise
+        begin_statement = "BEGIN IMMEDIATE" if immediate else "BEGIN DEFERRED"
+        
+        for attempt in range(max_retries):
+            transaction_started = False
+            try:
+                conn.execute(begin_statement)
+                transaction_started = True
+                yield conn
+                conn.commit()
+                
+                # NullPool behavior: close connection after successful transaction
+                if self._use_nullpool:
+                    self.close_connection()
+                
+                return  # Success - exit the function
+            except sqlite3.OperationalError as e:
+                if transaction_started:
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                
+                # Close stale connection on error
+                self.close_connection()
+                    
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    logger.warning(f"Database locked, retrying in {wait_time}s ({attempt + 1}/{max_retries})...", 
+                                 error=str(e), begin_mode=begin_statement)
+                    time.sleep(wait_time)
+                    continue  # Try again
+                else:
+                    logger.error("Database transaction failed after all retries", error=str(e), attempt=attempt + 1)
+                    raise
+            except Exception as e:
+                if transaction_started:
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                
+                # Close connection on any error
+                self.close_connection()
+                
+                logger.error("Database transaction rolled back", error=str(e))
+                raise
+        
+        # If we get here, all retries failed
+        raise DatabaseError("Database transaction failed after all retry attempts")
     
     def execute_query(self, query: str, params: Optional[tuple] = None) -> sqlite3.Cursor:
         """Execute a query with automatic connection management"""
@@ -204,6 +259,41 @@ CREATE TABLE IF NOT EXISTS episode_dependencies (
     FOREIGN KEY (depends_on_episode_id) REFERENCES episodes(id) ON DELETE CASCADE,
     UNIQUE(episode_id, depends_on_episode_id, dependency_type)
 )
+            ''',
+            
+            4: '''
+CREATE TABLE IF NOT EXISTS json_metadata_index (
+    episode_id TEXT PRIMARY KEY,
+    file_path TEXT NOT NULL,
+    file_size INTEGER,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Extracted searchable fields
+    show_name TEXT,
+    title TEXT,
+    date TEXT,
+    duration_seconds REAL,
+    guest_names TEXT,
+    topics TEXT,
+    has_transcript BOOLEAN DEFAULT 0,
+    has_enrichment BOOLEAN DEFAULT 0,
+    has_editorial BOOLEAN DEFAULT 0,
+    FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_json_show_name ON json_metadata_index(show_name);
+CREATE INDEX IF NOT EXISTS idx_json_date ON json_metadata_index(date);
+CREATE INDEX IF NOT EXISTS idx_json_duration ON json_metadata_index(duration_seconds);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS episodes_search USING fts5(
+    episode_id UNINDEXED,
+    title,
+    summary,
+    transcript_text,
+    topics,
+    guest_names,
+    content='json_metadata_index',
+    content_rowid='rowid'
+);
             '''
         }
     

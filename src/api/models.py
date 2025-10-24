@@ -31,6 +31,19 @@ class WebhookRequest(BaseModel):
     timestamp: Optional[datetime] = Field(None, description="Event timestamp")
 
 
+class EpisodeMetadata(BaseModel):
+    """Normalized metadata block for episode understanding"""
+    show_name: Optional[str] = None
+    title: Optional[str] = None
+    host: Optional[str] = None
+    topic: Optional[str] = None
+    guests: Optional[List[str]] = None
+    date: Optional[str] = None
+    description: Optional[str] = None
+    confidence: Optional[float] = None
+    model_version: Optional[str] = None
+
+
 class ProcessingResponse(BaseModel):
     """Response for processing operations"""
     success: bool
@@ -39,6 +52,8 @@ class ProcessingResponse(BaseModel):
     duration: float
     error: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
+    metadata: EpisodeMetadata = Field(default_factory=EpisodeMetadata)
+    outputs: Optional[Dict[str, Any]] = None  # HTML, artifacts, etc.
 
 
 class BatchProcessingResponse(BaseModel):

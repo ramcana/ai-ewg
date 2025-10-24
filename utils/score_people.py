@@ -416,8 +416,34 @@ def main():
     topics = args.topics or data.get('topics', [])
     
     if not enriched_people:
-        print("ERROR: No enriched people found in input file", file=sys.stderr)
-        sys.exit(1)
+        print("WARNING: No enriched people found in input file - returning empty result", file=sys.stderr)
+        
+        # Create output directory if needed
+        output_dir = os.path.dirname(args.output)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Return empty but valid result
+        from datetime import datetime
+        empty_result = {
+            'schema_version': 'ic-1.0.0',
+            'scored_people': [],
+            'summary': {
+                'total_people': 0,
+                'avg_score': 0.0,
+                'badge_distribution': {},
+                'authority_distribution': {},
+                'verification_distribution': {},
+                'journalistic_relevance': {}
+            },
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        with open(args.output, 'w', encoding='utf-8') as f:
+            json.dump(empty_result, f, indent=2, ensure_ascii=False)
+        
+        print(f"✓ Empty result saved to: {args.output}", file=sys.stderr)
+        return
     
     # Create output directory if needed
     output_dir = os.path.dirname(args.output)

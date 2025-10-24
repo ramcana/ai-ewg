@@ -530,7 +530,8 @@ def api_command(args) -> int:
         run_server(
             host=args.host,
             port=args.port,
-            config_path=args.config
+            config_path=args.config,
+            reload=args.reload
         )
         
         return 0

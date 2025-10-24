@@ -277,6 +277,76 @@ class EpisodeRegistry:
                         error=str(e))
             raise DatabaseError(f"Failed to update episode data: {e}")
     
+    def update_episode_source_path(self, episode_id: str, new_path: str) -> None:
+        """
+        Update episode source path (for moved/renamed files)
+        
+        Args:
+            episode_id: Episode identifier
+            new_path: New file path
+        """
+        try:
+            with self.connection.transaction() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE episodes 
+                    SET source_path = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (new_path, episode_id)
+                )
+                
+                if cursor.rowcount == 0:
+                    raise DatabaseError(f"Episode not found: {episode_id}")
+            
+            logger.info("Updated episode source path",
+                       episode_id=episode_id,
+                       new_path=new_path)
+            
+        except Exception as e:
+            logger.error("Failed to update episode source path",
+                        episode_id=episode_id,
+                        error=str(e))
+            raise DatabaseError(f"Failed to update episode source path: {e}")
+    
+    def update_episode_hash(self, episode_id: str, new_hash: str, file_size: int, last_modified: datetime) -> None:
+        """
+        Update episode hash and file metadata (for changed files)
+        
+        Args:
+            episode_id: Episode identifier
+            new_hash: New content hash
+            file_size: New file size
+            last_modified: New modification timestamp
+        """
+        try:
+            with self.connection.transaction() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE episodes 
+                    SET hash = ?,
+                        file_size = ?,
+                        last_modified = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (new_hash, file_size, last_modified.isoformat(), episode_id)
+                )
+                
+                if cursor.rowcount == 0:
+                    raise DatabaseError(f"Episode not found: {episode_id}")
+            
+            logger.warning("Updated episode hash - file content changed",
+                          episode_id=episode_id,
+                          new_hash=new_hash[:16])
+            
+        except Exception as e:
+            logger.error("Failed to update episode hash",
+                        episode_id=episode_id,
+                        error=str(e))
+            raise DatabaseError(f"Failed to update episode hash: {e}")
+    
     def get_episodes_by_stage(self, stage: ProcessingStage) -> List[EpisodeObject]:
         """
         Get all episodes at a specific processing stage
@@ -406,6 +476,40 @@ class EpisodeRegistry:
         except Exception as e:
             logger.error("Failed to retrieve episode IDs", error=str(e))
             raise DatabaseError(f"Failed to retrieve episode IDs: {e}")
+    
+    def find_episode_by_filename(self, filename: str) -> Optional[EpisodeObject]:
+        """
+        Find episode by filename (useful for cross-platform path matching)
+        
+        Args:
+            filename: Filename to search for (e.g., "OSS096.mp4")
+            
+        Returns:
+            EpisodeObject or None if not found
+        """
+        try:
+            # Search for episodes where source_path contains the filename
+            cursor = self.connection.execute_query(
+                "SELECT * FROM episodes WHERE source_path LIKE ?",
+                (f"%{filename}%",)
+            )
+            
+            rows = cursor.fetchall()
+            
+            if not rows:
+                return None
+            
+            # If multiple matches, log warning and return first
+            if len(rows) > 1:
+                logger.warning(f"Multiple episodes found with filename '{filename}', returning first match")
+            
+            return self._row_to_episode(rows[0])
+            
+        except Exception as e:
+            logger.error("Failed to find episode by filename",
+                        filename=filename,
+                        error=str(e))
+            raise DatabaseError(f"Failed to find episode by filename: {e}")
     
     def log_processing_event(self, episode_id: str, stage: str, status: str, 
                            duration: Optional[float] = None, 

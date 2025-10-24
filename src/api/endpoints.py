@@ -23,12 +23,167 @@ from .models import (
     PipelineStatsResponse,
     ConfigurationResponse,
     ErrorResponse,
-    SuccessResponse
+    SuccessResponse,
+    EpisodeMetadata
 )
 from fastapi import Depends
 from ..core import get_logger
 
 logger = get_logger('pipeline.api.endpoints')
+
+
+def _extract_outputs(orchestrator, episode_id: str, stage) -> Optional[Dict[str, Any]]:
+    """
+    Extract outputs (HTML, artifacts) for rendered episodes
+    
+    Args:
+        orchestrator: Pipeline orchestrator instance
+        episode_id: Episode identifier
+        stage: Current processing stage
+        
+    Returns:
+        Dict with outputs or None if not rendered
+    """
+    from pathlib import Path
+    from ..core.models import ProcessingStage
+    
+    # Only include outputs for rendered stage
+    if stage != ProcessingStage.RENDERED:
+        return None
+    
+    outputs = {}
+    
+    try:
+        # Get episode to find show name for path construction
+        episode = orchestrator.registry.get_episode(episode_id)
+        if not episode:
+            return None
+        
+        show_name = episode.metadata.show_name if episode.metadata else "unknown"
+        show_slug = episode.metadata.show_slug if episode.metadata else show_name.lower().replace(' ', '-')
+        
+        # Try multiple possible HTML paths
+        possible_paths = [
+            Path(f"data/public/shows/{show_slug}/{episode_id}/index.html"),
+            Path(f"data/public/{show_slug}/{episode_id}/index.html"),
+            Path(f"data/public/{episode_id}.html"),
+        ]
+        
+        for html_path in possible_paths:
+            if html_path.exists():
+                try:
+                    outputs["rendered_html"] = html_path.read_text(encoding='utf-8')
+                    outputs["html_path"] = str(html_path)
+                    logger.info(f"Included HTML output in response", 
+                               episode_id=episode_id, 
+                               path=str(html_path))
+                    break
+                except Exception as e:
+                    logger.warning(f"Could not read HTML file", 
+                                  path=str(html_path), 
+                                  error=str(e))
+        
+        # Include transcript paths if available
+        transcript_txt = Path(f"data/transcripts/{episode_id}.txt")
+        transcript_vtt = Path(f"data/transcripts/{episode_id}.vtt")
+        
+        if transcript_txt.exists():
+            outputs["transcript_path"] = str(transcript_txt)
+        if transcript_vtt.exists():
+            outputs["vtt_path"] = str(transcript_vtt)
+        
+        return outputs if outputs else None
+        
+    except Exception as e:
+        logger.error(f"Error extracting outputs", 
+                    episode_id=episode_id, 
+                    error=str(e))
+        return None
+
+
+def _extract_metadata_from_registry(orchestrator, episode_id: str) -> EpisodeMetadata:
+    """
+    Extract normalized metadata from episode registry (SQLite JSON blob)
+    
+    Args:
+        orchestrator: Pipeline orchestrator instance
+        episode_id: Episode identifier
+        
+    Returns:
+        EpisodeMetadata: Normalized metadata block
+    """
+    try:
+        # Get episode from registry
+        episode = orchestrator.registry.get_episode(episode_id)
+        
+        if not episode:
+            logger.warning(f"Episode not found in registry", episode_id=episode_id)
+            return EpisodeMetadata()
+        
+        # Extract metadata fields from episode object
+        md = episode.metadata
+        transcription = episode.transcription
+        enrichment = episode.enrichment
+        editorial = episode.editorial
+        
+        # Extract guests from enrichment (people.guests array)
+        guests = None
+        if enrichment and enrichment.entities:
+            # Entities might contain people information
+            people_data = enrichment.entities.get('people', {})
+            if isinstance(people_data, dict):
+                guests_list = people_data.get('guests', [])
+                if guests_list:
+                    guests = [g.get('name') for g in guests_list if isinstance(g, dict) and g.get('name')]
+        
+        # Get host from metadata or enrichment
+        host = None
+        if enrichment and enrichment.entities:
+            people_data = enrichment.entities.get('people', {})
+            if isinstance(people_data, dict):
+                host_data = people_data.get('host', {})
+                if isinstance(host_data, dict):
+                    host = host_data.get('name')
+        
+        # Fallback to basic metadata if enrichment not available
+        if not host and hasattr(md, 'host'):
+            host = getattr(md, 'host', None)
+        
+        # Get description from editorial summary
+        description = None
+        if editorial:
+            description = editorial.summary
+        elif hasattr(md, 'description'):
+            description = md.description
+        
+        # Get confidence from transcription
+        confidence = None
+        if transcription:
+            confidence = transcription.confidence
+        
+        # Get model version from transcription
+        model_version = None
+        if transcription:
+            model_version = transcription.model_used
+        
+        return EpisodeMetadata(
+            show_name=md.show_name if md else None,
+            title=md.title if md else None,
+            host=host,
+            topic=md.topic if md else None,
+            guests=guests,
+            date=md.date if md else None,
+            description=description,
+            confidence=confidence,
+            model_version=model_version
+        )
+        
+    except Exception as e:
+        logger.error(f"Error extracting metadata from registry", 
+                    episode_id=episode_id, 
+                    error=str(e))
+        # Return empty metadata on error rather than failing the request
+        return EpisodeMetadata()
 
 
 def get_orchestrator():
@@ -185,13 +340,21 @@ def register_endpoints(app: FastAPI):
                 request.force_reprocess
             )
             
+            # Enrich response with normalized metadata from SQLite after processing
+            metadata = _extract_metadata_from_registry(orchestrator, request.episode_id)
+            
+            # Include HTML and other outputs if stage is rendered
+            outputs = _extract_outputs(orchestrator, request.episode_id, result.stage)
+            
             return ProcessingResponse(
                 success=result.success,
                 episode_id=result.episode_id,
                 stage=result.stage.value,
                 duration=result.duration,
                 error=result.error,
-                metrics=result.metrics
+                metrics=result.metrics,
+                metadata=metadata,
+                outputs=outputs
             )
             
         except Exception as e:

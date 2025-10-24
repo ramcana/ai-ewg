@@ -66,10 +66,11 @@ class DatabaseConfig:
     path: str = "data/pipeline.db"
     backup_enabled: bool = True
     backup_interval_hours: int = 24
-    connection_timeout: int = 30
+    connection_timeout: int = 10  # SQLite connection timeout (seconds)
     max_connections: int = 10
-    journal_mode: str = "WAL"
-    synchronous: str = "NORMAL"
+    journal_mode: str = "WAL"  # Write-Ahead Logging for better concurrency
+    synchronous: str = "NORMAL"  # Safe with WAL, reduces filesystem thrashing
+    busy_timeout: int = 10000  # Wait up to 10 seconds if database is locked (10000ms)
 
 
 @dataclass

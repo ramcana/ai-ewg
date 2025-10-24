@@ -51,7 +51,6 @@ test_videos/
 *.tmp
 *.temp
 *.log
-token.txt
 
 # Testing & Coverage
 .pytest_cache/

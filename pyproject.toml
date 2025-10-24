@@ -7,7 +7,7 @@ readme = "README.md"
 license = {text = "MIT"}
 
 [project.scripts]
-ai-ewg = "ai_ewg.cli:main_cli"
+ai-ewg = "src.ai_ewg.cli:main_cli"
 
 [build-system]
 requires = ["setuptools>=68.0"]
@@ -121,6 +121,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 
 markers = [
+    "mini: Fast mini-fixture tests for CI",
     "gpu: Tests requiring GPU/CUDA support",
     "cpu: Tests that run on CPU only",
     "slow: Tests that take a long time",
