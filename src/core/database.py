@@ -448,6 +448,10 @@ class DatabaseManager:
             logger.error("Database initialization failed", error=str(e))
             raise DatabaseError(f"Failed to initialize database: {e}")
     
+    def initialize_schema(self) -> None:
+        """Alias for initialize() for backward compatibility"""
+        self.initialize()
+    
     def _verify_database_integrity(self) -> None:
         """Verify database integrity and structure"""
         try:
