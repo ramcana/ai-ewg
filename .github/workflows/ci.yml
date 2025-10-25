@@ -117,11 +117,7 @@ jobs:
         env:
           DIARIZE_DEVICE: cpu
           WHISPER_DEVICE: cpu
-        run: |
-          pytest tests/test_mini.py \
-            -v \
-            -m mini \
-            --junit-xml=mini-test-results.xml
+        run: pytest tests/test_mini.py -v -m mini --junit-xml=mini-test-results.xml
 
       - name: Upload mini test results
         if: always()
@@ -171,16 +167,7 @@ jobs:
           DIARIZE_DEVICE: cpu
           SKIP_GPU_TESTS: "1"
           MOCK_MODELS: "1"
-        run: |
-          pytest tests/ \
-            -v \
-            -m "not gpu and not mini" \
-            --cov=src \
-            --cov=utils \
-            --cov-report=xml \
-            --cov-report=html \
-            --cov-report=term-missing \
-            --junit-xml=test-results.xml
+        run: pytest tests/ -v -m "not gpu and not mini" --cov=src --cov=utils --cov-report=xml --cov-report=html --cov-report=term-missing --junit-xml=test-results.xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
