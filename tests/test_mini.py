@@ -230,8 +230,9 @@ class TestMiniPipeline:
             ),
             metadata=EpisodeMetadata(
                 show_name="Test Show",
-                episode_number=1,
-                season_number=1
+                show_slug="test-show",
+                episode=1,
+                season=1
             )
         )
         
