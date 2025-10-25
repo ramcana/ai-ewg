@@ -139,6 +139,17 @@ class NormalizationError(PipelineError):
         self.file_path = file_path
 
 
+class TranscriptionError(PipelineError):
+    """Raised when transcription operations fail"""
+    
+    def __init__(self, message: str, audio_path: Optional[str] = None, **kwargs):
+        context = kwargs.get('context', {})
+        if audio_path:
+            context['audio_path'] = audio_path
+        super().__init__(message, context)
+        self.audio_path = audio_path
+
+
 # Clip Generation Exception Hierarchy
 
 class ClipGenerationError(PipelineError):

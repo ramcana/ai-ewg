@@ -411,9 +411,14 @@ CREATE INDEX IF NOT EXISTS idx_clip_assets_clip_id ON clip_assets(clip_id);
 class DatabaseManager:
     """Main database manager for the pipeline"""
     
-    def __init__(self, config: DatabaseConfig):
-        self.config = config
-        self.db_path = Path(config.path)
+    def __init__(self, config: Union[DatabaseConfig, str]):
+        # Accept either DatabaseConfig object or string path for convenience
+        if isinstance(config, str):
+            from .config import DatabaseConfig as DbConfig
+            self.config = DbConfig(path=config)
+        else:
+            self.config = config
+        self.db_path = Path(self.config.path)
         self.connection: Optional[DatabaseConnection] = None
         self.migration: Optional[DatabaseMigration] = None
         
