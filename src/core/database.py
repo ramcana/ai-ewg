@@ -294,6 +294,42 @@ CREATE VIRTUAL TABLE IF NOT EXISTS episodes_search USING fts5(
     content='json_metadata_index',
     content_rowid='rowid'
 );
+            ''',
+            
+            5: '''
+-- Clips discovered for an episode
+CREATE TABLE IF NOT EXISTS clips (
+    id TEXT PRIMARY KEY,
+    episode_id TEXT NOT NULL,
+    start_ms INTEGER NOT NULL,
+    end_ms INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    score REAL NOT NULL,           -- 0..1 overall highlight score
+    title TEXT,
+    caption TEXT,
+    hashtags TEXT,                 -- JSON array
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending|rendered|failed
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
+);
+
+-- Export files generated
+CREATE TABLE IF NOT EXISTS clip_assets (
+    id TEXT PRIMARY KEY,
+    clip_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    variant TEXT NOT NULL,         -- 'clean','subtitled'
+    aspect_ratio TEXT NOT NULL,    -- '9x16','16x9','1x1'
+    size_bytes INTEGER,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (clip_id) REFERENCES clips(id) ON DELETE CASCADE
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_clips_episode_id ON clips(episode_id);
+CREATE INDEX IF NOT EXISTS idx_clips_status ON clips(status);
+CREATE INDEX IF NOT EXISTS idx_clips_score ON clips(score DESC);
+CREATE INDEX IF NOT EXISTS idx_clip_assets_clip_id ON clip_assets(clip_id);
             '''
         }
     

@@ -33,6 +33,10 @@ class APIServer:
             self.orchestrator = PipelineOrchestrator(config_path=self.config_path)
             logger.info("Pipeline orchestrator initialized for API server")
             
+            # Initialize database and registry
+            self.orchestrator.initialize_database()
+            logger.info("Database and registry initialized")
+            
             # Verify SQLite configuration
             self._verify_sqlite_config()
             

@@ -103,6 +103,43 @@ class ResourceConfig:
 
 
 @dataclass
+class ClipGenerationConfig:
+    """Configuration for clip generation system"""
+    enabled: bool = False
+    embedding_model: str = "bge-small-en"
+    max_clips_per_episode: int = 8
+    min_segment_duration_ms: int = 20000
+    max_segment_duration_ms: int = 120000
+    safe_padding_ms: int = 500
+    llm_rerank_enabled: bool = True
+    llm_model: str = "llama3"
+    llm_timeout: int = 30
+    cache_embeddings: bool = True
+    embedding_batch_size: int = 32
+    
+    # Scoring weights
+    heuristic_weights: Dict[str, float] = field(default_factory=lambda: {
+        'hook_phrases': 0.3,
+        'entity_density': 0.2,
+        'sentiment_peaks': 0.2,
+        'qa_patterns': 0.2,
+        'compression_ratio': 0.1
+    })
+    
+    # Export settings
+    aspect_ratios: List[str] = field(default_factory=lambda: ["9x16", "16x9"])
+    variants: List[str] = field(default_factory=lambda: ["clean", "subtitled"])
+    video_codec: str = "libx264"
+    audio_codec: str = "aac"
+    crf: int = 20
+    preset: str = "veryfast"
+    
+    # Resource limits
+    max_memory_percent: float = 80.0
+    max_cpu_percent: float = 70.0
+
+
+@dataclass
 class PipelineConfig:
     """Main configuration class for the pipeline"""
     sources: List[SourceConfig] = field(default_factory=list)
@@ -114,6 +151,7 @@ class PipelineConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
     resources: ResourceConfig = field(default_factory=ResourceConfig)
+    clip_generation: ClipGenerationConfig = field(default_factory=ClipGenerationConfig)
     
     # Environment-specific overrides
     newsroom_path: Optional[str] = None
@@ -210,7 +248,22 @@ class ConfigurationManager:
             'LOG_DIRECTORY': 'logging.directory',
             'DATABASE_PATH': 'database.path',
             'STAGING_PATH': 'staging.path',
-            'MAX_CONCURRENT_EPISODES': 'processing.max_concurrent_episodes'
+            'MAX_CONCURRENT_EPISODES': 'processing.max_concurrent_episodes',
+            
+            # Clip Generation Settings
+            'CLIP_GENERATION_ENABLED': 'clip_generation.enabled',
+            'CLIP_EMBEDDING_MODEL': 'clip_generation.embedding_model',
+            'CLIP_MAX_PER_EPISODE': 'clip_generation.max_clips_per_episode',
+            'CLIP_MIN_DURATION_MS': 'clip_generation.min_segment_duration_ms',
+            'CLIP_MAX_DURATION_MS': 'clip_generation.max_segment_duration_ms',
+            'CLIP_SAFE_PADDING_MS': 'clip_generation.safe_padding_ms',
+            'CLIP_LLM_ENABLED': 'clip_generation.llm_rerank_enabled',
+            'CLIP_LLM_MODEL': 'clip_generation.llm_model',
+            'CLIP_LLM_TIMEOUT': 'clip_generation.llm_timeout',
+            'CLIP_CACHE_EMBEDDINGS': 'clip_generation.cache_embeddings',
+            'CLIP_EMBEDDING_BATCH_SIZE': 'clip_generation.embedding_batch_size',
+            'CLIP_MAX_MEMORY_PERCENT': 'clip_generation.max_memory_percent',
+            'CLIP_MAX_CPU_PERCENT': 'clip_generation.max_cpu_percent'
         }
         
         for env_var, config_path in env_mappings.items():
@@ -288,6 +341,8 @@ class ConfigurationManager:
             database = DatabaseConfig(**config_dict.get('database', {}))
             logging_config = LoggingConfig(**config_dict.get('logging', {}))
             processing = ProcessingConfig(**config_dict.get('processing', {}))
+            resources = ResourceConfig(**config_dict.get('resources', {}))
+            clip_generation = ClipGenerationConfig(**config_dict.get('clip_generation', {}))
             
             # Create main config
             return PipelineConfig(
@@ -299,6 +354,8 @@ class ConfigurationManager:
                 database=database,
                 logging=logging_config,
                 processing=processing,
+                resources=resources,
+                clip_generation=clip_generation,
                 newsroom_path=config_dict.get('newsroom_path'),
                 hf_token=config_dict.get('hf_token'),
                 ollama_url=config_dict.get('ollama_url', 'http://localhost:11434'),
@@ -417,6 +474,34 @@ class ConfigurationManager:
                 'max_retry_attempts': config.processing.max_retry_attempts,
                 'retry_delay_seconds': config.processing.retry_delay_seconds,
                 'timeout_minutes': config.processing.timeout_minutes
+            },
+            'resources': {
+                'max_memory_percent': config.resources.max_memory_percent,
+                'max_cpu_percent': config.resources.max_cpu_percent,
+                'max_disk_usage_percent': config.resources.max_disk_usage_percent,
+                'max_open_files': config.resources.max_open_files
+            },
+            'clip_generation': {
+                'enabled': config.clip_generation.enabled,
+                'embedding_model': config.clip_generation.embedding_model,
+                'max_clips_per_episode': config.clip_generation.max_clips_per_episode,
+                'min_segment_duration_ms': config.clip_generation.min_segment_duration_ms,
+                'max_segment_duration_ms': config.clip_generation.max_segment_duration_ms,
+                'safe_padding_ms': config.clip_generation.safe_padding_ms,
+                'llm_rerank_enabled': config.clip_generation.llm_rerank_enabled,
+                'llm_model': config.clip_generation.llm_model,
+                'llm_timeout': config.clip_generation.llm_timeout,
+                'cache_embeddings': config.clip_generation.cache_embeddings,
+                'embedding_batch_size': config.clip_generation.embedding_batch_size,
+                'heuristic_weights': config.clip_generation.heuristic_weights,
+                'aspect_ratios': config.clip_generation.aspect_ratios,
+                'variants': config.clip_generation.variants,
+                'video_codec': config.clip_generation.video_codec,
+                'audio_codec': config.clip_generation.audio_codec,
+                'crf': config.clip_generation.crf,
+                'preset': config.clip_generation.preset,
+                'max_memory_percent': config.clip_generation.max_memory_percent,
+                'max_cpu_percent': config.clip_generation.max_cpu_percent
             },
             'newsroom_path': config.newsroom_path,
             'hf_token': config.hf_token,

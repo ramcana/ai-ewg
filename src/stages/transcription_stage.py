@@ -60,13 +60,14 @@ class TranscriptionStageProcessor:
             if not audio_file.exists():
                 raise ProcessingError(f"Audio file not found: {audio_path}")
             
-            # Run Whisper transcription
+            # Run Whisper transcription with word timestamps
             logger.info("Running Whisper transcription...")
             result = self.model.transcribe(
                 str(audio_file),
                 language='en',  # Force English for now
                 task='transcribe',
-                verbose=False
+                verbose=False,
+                word_timestamps=True  # Enable word-level timestamps for clip generation
             )
             
             # Save plain text transcript
@@ -82,20 +83,28 @@ class TranscriptionStageProcessor:
             
             logger.info("VTT captions saved", path=str(vtt_path))
             
+            # Extract word-level timestamps for clip generation
+            words = []
+            for segment in result['segments']:
+                if 'words' in segment:
+                    words.extend(segment['words'])
+            
             # Calculate statistics
             segment_count = len(result['segments'])
-            word_count = len(result['text'].split())
+            word_count = len(words) if words else len(result['text'].split())
             
             logger.info("Transcription completed",
                        episode_id=episode.episode_id,
                        segments=segment_count,
-                       words=word_count)
+                       words=word_count,
+                       word_timestamps=len(words) > 0)
             
             return {
                 'txt_path': str(txt_path),
                 'vtt_path': str(vtt_path),
                 'text': result['text'],
                 'segments': result['segments'],
+                'words': words,  # Word-level timestamps for clip generation
                 'language': result.get('language', 'en'),
                 'segment_count': segment_count,
                 'word_count': word_count,

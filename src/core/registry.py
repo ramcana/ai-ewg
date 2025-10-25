@@ -244,7 +244,7 @@ class EpisodeRegistry:
             with self.connection.transaction() as conn:
                 metadata_json = json.dumps(episode.to_dict())
                 
-                conn.execute("""
+                cursor = conn.execute("""
                     UPDATE episodes SET
                         stage = ?,
                         metadata = ?,
@@ -264,7 +264,7 @@ class EpisodeRegistry:
                     episode.episode_id
                 ))
                 
-                if conn.rowcount == 0:
+                if cursor.rowcount == 0:
                     raise ValidationError(f"Episode not found: {episode.episode_id}")
             
             logger.info("Episode data updated",

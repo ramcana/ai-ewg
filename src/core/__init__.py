@@ -20,6 +20,8 @@ from .media_preparation import (
     AudioFile,
     ValidationResult
 )
+from .models import ClipObject, ClipAsset, ClipStatus
+from .clip_registry import ClipRegistry
 
 __all__ = [
     'PipelineOrchestrator',
@@ -36,5 +38,9 @@ __all__ = [
     'MediaHealthChecker',
     'MediaPreparationPipeline',
     'AudioFile',
-    'ValidationResult'
+    'ValidationResult',
+    'ClipObject',
+    'ClipAsset',
+    'ClipStatus',
+    'ClipRegistry'
 ]

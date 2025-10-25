@@ -12,6 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass, field, asdict
+import uuid
 
 
 class ProcessingStage(Enum):
@@ -21,6 +22,14 @@ class ProcessingStage(Enum):
     TRANSCRIBED = "transcribed"
     ENRICHED = "enriched"
     RENDERED = "rendered"
+    CLIPS_DISCOVERED = "clips_discovered"
+
+
+class ClipStatus(Enum):
+    """Status of clip processing"""
+    PENDING = "pending"
+    RENDERED = "rendered"
+    FAILED = "failed"
 
 
 @dataclass
@@ -112,6 +121,8 @@ class TranscriptionResult:
     confidence: float = 0.0
     language: str = "en"
     model_used: str = "base"
+    words: List[Dict[str, Any]] = field(default_factory=list)  # Word-level timestamps for clip generation
+    diarization: Optional[Dict[str, Any]] = None  # Speaker diarization data
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -319,6 +330,153 @@ class ContentHasher:
         )
         
         return hashlib.sha256(hash_input.encode()).hexdigest()
+
+
+@dataclass
+class ClipObject:
+    """Clip discovered from an episode with metadata"""
+    id: str
+    episode_id: str
+    start_ms: int
+    end_ms: int
+    duration_ms: int
+    score: float
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    hashtags: List[str] = field(default_factory=list)
+    status: ClipStatus = ClipStatus.PENDING
+    created_at: Optional[datetime] = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        
+        # Validate data
+        if self.start_ms < 0:
+            raise ValueError("start_ms must be non-negative")
+        if self.end_ms <= self.start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        if self.duration_ms != (self.end_ms - self.start_ms):
+            raise ValueError("duration_ms must equal (end_ms - start_ms)")
+        if not 0.0 <= self.score <= 1.0:
+            raise ValueError("score must be between 0.0 and 1.0")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage"""
+        return {
+            'id': self.id,
+            'episode_id': self.episode_id,
+            'start_ms': self.start_ms,
+            'end_ms': self.end_ms,
+            'duration_ms': self.duration_ms,
+            'score': self.score,
+            'title': self.title,
+            'caption': self.caption,
+            'hashtags': self.hashtags,
+            'status': self.status.value,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ClipObject':
+        """Create from dictionary (database retrieval)"""
+        return cls(
+            id=data['id'],
+            episode_id=data['episode_id'],
+            start_ms=data['start_ms'],
+            end_ms=data['end_ms'],
+            duration_ms=data['duration_ms'],
+            score=data['score'],
+            title=data.get('title'),
+            caption=data.get('caption'),
+            hashtags=data.get('hashtags', []),
+            status=ClipStatus(data.get('status', 'pending')),
+            created_at=datetime.fromisoformat(data['created_at']) if data.get('created_at') else None
+        )
+    
+    @classmethod
+    def create_clip(cls, episode_id: str, start_ms: int, end_ms: int, score: float,
+                   title: Optional[str] = None, caption: Optional[str] = None,
+                   hashtags: Optional[List[str]] = None) -> 'ClipObject':
+        """Factory method to create a new clip with generated ID"""
+        clip_id = f"clip_{uuid.uuid4().hex[:12]}"
+        duration_ms = end_ms - start_ms
+        
+        return cls(
+            id=clip_id,
+            episode_id=episode_id,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            duration_ms=duration_ms,
+            score=score,
+            title=title,
+            caption=caption,
+            hashtags=hashtags or []
+        )
+
+
+@dataclass
+class ClipAsset:
+    """Generated clip asset file"""
+    id: str
+    clip_id: str
+    path: str
+    variant: str  # 'clean' or 'subtitled'
+    aspect_ratio: str  # '9x16', '16x9', '1x1'
+    size_bytes: Optional[int] = None
+    created_at: Optional[datetime] = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        
+        # Validate variant
+        if self.variant not in ['clean', 'subtitled']:
+            raise ValueError("variant must be 'clean' or 'subtitled'")
+        
+        # Validate aspect ratio
+        if self.aspect_ratio not in ['9x16', '16x9', '1x1']:
+            raise ValueError("aspect_ratio must be '9x16', '16x9', or '1x1'")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage"""
+        return {
+            'id': self.id,
+            'clip_id': self.clip_id,
+            'path': self.path,
+            'variant': self.variant,
+            'aspect_ratio': self.aspect_ratio,
+            'size_bytes': self.size_bytes,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ClipAsset':
+        """Create from dictionary (database retrieval)"""
+        return cls(
+            id=data['id'],
+            clip_id=data['clip_id'],
+            path=data['path'],
+            variant=data['variant'],
+            aspect_ratio=data['aspect_ratio'],
+            size_bytes=data.get('size_bytes'),
+            created_at=datetime.fromisoformat(data['created_at']) if data.get('created_at') else None
+        )
+    
+    @classmethod
+    def create_asset(cls, clip_id: str, path: str, variant: str, aspect_ratio: str,
+                    size_bytes: Optional[int] = None) -> 'ClipAsset':
+        """Factory method to create a new clip asset with generated ID"""
+        asset_id = f"asset_{uuid.uuid4().hex[:12]}"
+        
+        return cls(
+            id=asset_id,
+            clip_id=clip_id,
+            path=path,
+            variant=variant,
+            aspect_ratio=aspect_ratio,
+            size_bytes=size_bytes
+        )
 
 
 # Utility functions for working with models

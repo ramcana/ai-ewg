@@ -124,10 +124,11 @@ class PipelineOrchestrator:
             ProcessingStage.PREPPED: self._process_prep_stage,
             ProcessingStage.TRANSCRIBED: self._process_transcription_stage,
             ProcessingStage.ENRICHED: self._process_enrichment_stage,
-            ProcessingStage.RENDERED: self._process_rendering_stage
+            ProcessingStage.RENDERED: self._process_rendering_stage,
+            ProcessingStage.CLIPS_DISCOVERED: self._process_clips_discovery_stage
         }
     
-    async def process_episode(self, episode_id: str, target_stage: ProcessingStage = ProcessingStage.RENDERED, force_reprocess: bool = False) -> ProcessingResult:
+    async def process_episode(self, episode_id: str, target_stage: ProcessingStage = ProcessingStage.RENDERED, force_reprocess: bool = False, include_clip_discovery: bool = None) -> ProcessingResult:
         """
         Process a single episode through the pipeline stages
         
@@ -135,6 +136,8 @@ class PipelineOrchestrator:
             episode_id: Unique identifier for the episode
             target_stage: Final stage to process to
             force_reprocess: If True, reprocess even if already at target stage
+            include_clip_discovery: If True, include clip discovery after rendering. 
+                                  If None, use config setting.
             
         Returns:
             ProcessingResult: Result of the processing operation
@@ -168,10 +171,23 @@ class PipelineOrchestrator:
             # Process through each required stage
             stages_to_process = self._get_stages_to_process(current_stage, target_stage)
             
+            # Add clip discovery if enabled and target stage is RENDERED or higher
+            if include_clip_discovery is None:
+                include_clip_discovery = self.config.clip_generation.enabled
+            
+            if (include_clip_discovery and 
+                target_stage in [ProcessingStage.RENDERED, ProcessingStage.CLIPS_DISCOVERED] and
+                current_stage != ProcessingStage.CLIPS_DISCOVERED):
+                # If we're processing to RENDERED and clip discovery is enabled, extend to CLIPS_DISCOVERED
+                if target_stage == ProcessingStage.RENDERED:
+                    target_stage = ProcessingStage.CLIPS_DISCOVERED
+                    stages_to_process = self._get_stages_to_process(current_stage, target_stage)
+            
             self.logger.info(f"Stages to process: {[s.value for s in stages_to_process]}", 
                            episode_id=episode_id,
                            current_stage=current_stage.value,
-                           target_stage=target_stage.value)
+                           target_stage=target_stage.value,
+                           clip_discovery_enabled=include_clip_discovery)
             
             for stage in stages_to_process:
                 if self._shutdown_requested:
@@ -222,7 +238,8 @@ class PipelineOrchestrator:
     async def process_batch(self, episode_ids: List[str], 
                           target_stage: ProcessingStage = ProcessingStage.RENDERED,
                           max_concurrent: Optional[int] = None,
-                          progress_callback: Optional[Callable] = None) -> BatchProcessingStats:
+                          progress_callback: Optional[Callable] = None,
+                          include_clip_discovery: bool = None) -> BatchProcessingStats:
         """
         Process multiple episodes concurrently
         
@@ -252,7 +269,7 @@ class PipelineOrchestrator:
         
         async def process_with_semaphore(episode_id: str) -> ProcessingResult:
             async with semaphore:
-                result = await self.process_episode(episode_id, target_stage)
+                result = await self.process_episode(episode_id, target_stage, include_clip_discovery=include_clip_discovery)
                 
                 # Call progress callback if provided
                 if progress_callback:
@@ -423,6 +440,7 @@ class PipelineOrchestrator:
     async def _process_transcription_stage(self, episode_id: str) -> None:
         """Process transcription stage - run Whisper"""
         from ..stages.transcription_stage import TranscriptionStageProcessor
+        from ..core.models import TranscriptionResult
         
         self.logger.info("Processing transcription stage", episode_id=episode_id)
         
@@ -442,9 +460,26 @@ class PipelineOrchestrator:
         self._stage_data[episode_id] = {'transcript': result}
         
         if result['success']:
+            # Update episode with transcription results
+            with open(result['vtt_path'], 'r', encoding='utf-8') as f:
+                vtt_content = f.read()
+            
+            episode.transcription = TranscriptionResult(
+                text=result['text'],
+                vtt_content=vtt_content,
+                segments=result['segments'],
+                words=result.get('words', []),
+                language=result.get('language', 'en'),
+                model_used=self.config.models.whisper
+            )
+            
+            # Save updated episode to database
+            self.registry.update_episode_data(episode)
+            
             self.logger.info("Transcription stage completed",
                            episode_id=episode_id,
-                           word_count=result.get('word_count', 0))
+                           word_count=result.get('word_count', 0),
+                           word_timestamps=len(result.get('words', [])) > 0)
     
     async def _process_enrichment_stage(self, episode_id: str) -> None:
         """Process enrichment stage - run intelligence chain"""
@@ -503,6 +538,38 @@ class PipelineOrchestrator:
             self.logger.info("Rendering stage completed",
                            episode_id=episode_id,
                            html_path=result.get('html_path'))
+    
+    async def _process_clips_discovery_stage(self, episode_id: str) -> None:
+        """Process clip discovery stage - discover and score clips"""
+        # Only run if clip generation is enabled
+        if not self.config.clip_generation.enabled:
+            self.logger.info("Clip generation disabled, skipping clip discovery", episode_id=episode_id)
+            return
+        
+        from ..core.clip_discovery import ClipDiscoveryEngine
+        
+        self.logger.info("Processing clip discovery stage", episode_id=episode_id)
+        
+        # Get episode
+        episode = self.registry.get_episode(episode_id)
+        if not episode:
+            raise ProcessingError(f"Episode not found: {episode_id}")
+        
+        # Run clip discovery with reliability context
+        try:
+            discovery_engine = ClipDiscoveryEngine(self.config.clip_generation)
+            result = await discovery_engine.discover_clips(episode_id)
+            
+            if result['success']:
+                self.logger.info("Clip discovery stage completed",
+                               episode_id=episode_id,
+                               clips_discovered=result.get('clips_count', 0))
+            else:
+                raise ProcessingError(f"Clip discovery failed: {result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            self.logger.error("Clip discovery stage failed", episode_id=episode_id, error=str(e))
+            raise ProcessingError(f"Clip discovery failed: {e}")
     
     def initialize_database(self) -> None:
         """Initialize database and registry"""

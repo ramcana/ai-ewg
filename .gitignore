@@ -39,6 +39,7 @@ test_videos/
 
 # Tool-specific
 .kiro/
+!.kiro/specs/
 
 # Database files
 *.db
@@ -70,3 +71,16 @@ test-results.xml
 # OS
 Thumbs.db
 .DS_Store
+
+# n8n Workflows (contain credentials and environment-specific configs)
+n8n_workflows/*.json
+!n8n_workflows/README.md
+n8n_workflows/test/
+
+# Backup files
+*.db.backup
+pipeline_backup_*.db
+
+# Temporary test outputs
+test_output.html
+*_output.html

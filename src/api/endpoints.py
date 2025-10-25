@@ -199,6 +199,10 @@ def get_orchestrator():
 def register_endpoints(app: FastAPI):
     """Register all API endpoints"""
     
+    # Register clip endpoints
+    from .clip_endpoints import register_clip_endpoints
+    register_clip_endpoints(app)
+    
     @app.get("/", response_model=Dict[str, str])
     async def root():
         """Root endpoint"""
