@@ -121,7 +121,7 @@ class TestMiniPipeline:
         )
         tables = {row[0] for row in cursor.fetchall()}
         
-        expected_tables = {'episodes', 'processing_log', 'artifacts'}
+        expected_tables = {'episodes', 'processing_log', 'schema_version'}
         assert expected_tables.issubset(tables), f"Missing tables: {expected_tables - tables}"
     
     def test_discovery_stage(self, test_config, mini_video_path):
@@ -217,7 +217,7 @@ class TestMiniPipeline:
         episode = EpisodeObject(
             episode_id="test_episode_001",
             content_hash="abc123",
-            processing_stage=ProcessingStage.NEW,
+            processing_stage=ProcessingStage.DISCOVERED,
             source=SourceInfo(
                 path="/test/video.mp4",
                 file_size=1000000,
