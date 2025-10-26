@@ -124,6 +124,12 @@ tests/test_clip_integration.py
 tests/test_clip_sentence_alignment.py
 tests/test_clip_topic_segmentation.py
 
+# Obsolete/Non-Essential Test Files
+tests/test_registry.py
+tests/test_all_components.py
+test_feed_validator_implementation.py
+test_simple_import.py
+
 # Development Documentation
 docs/CLIP_FSAT_PLAN.md
 docs/FSAT_EVALUATION.md
