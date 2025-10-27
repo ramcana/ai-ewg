@@ -1,0 +1,108 @@
+# Instagram Platform Policy Configuration
+# Defines content requirements, transformations, and metadata rules for Instagram uploads
+
+platform: instagram
+display_name: Instagram
+icon: 📸
+
+# Video technical specifications
+video:
+  aspect_ratio: 9:16  # Vertical format for Reels
+  max_duration: 90    # 90 seconds for Reels
+  min_duration: 15    # Minimum 15 seconds
+  formats: [mp4]
+  codec: h264
+  resolution:
+    preferred: 1080x1920  # 1080p vertical
+    minimum: 720x1280    # 720p vertical
+  bitrate:
+    video: 3500000  # 3.5 Mbps
+    audio: 128000   # 128 kbps
+  framerate: 30
+
+# Content guidelines and restrictions
+content:
+  allow_ads: false
+  age_restriction: false
+  contains_music: true    # Instagram encourages music
+  contains_ads: false
+  content_type: reel      # reel, story, post
+
+# Metadata requirements and templates
+metadata:
+  caption:
+    max_length: 2200
+    template: |
+      {hook_line}
+
+      🎥 {guest} on {show}
+
+      {hashtags}
+    required: true
+
+  hashtags:
+    max_count: 30
+    sources: [topics, guests, keywords, trending]
+    format: space_separated
+    style: camelCase
+    required: true
+
+# Platform-specific features
+features:
+  watermark: bottom_right
+  burn_in_captions: true
+  music_overlay: true
+  effects: true
+  stickers: true
+  text_overlays: true
+
+# Thumbnail/cover requirements
+thumbnail:
+  required: false  # Instagram auto-generates
+  formats: [jpg, png]
+  max_size_mb: 1
+  aspect_ratio: 9:16
+  resolution:
+    minimum: 1080x1920
+
+# Upload settings
+upload:
+  type: reel
+  share_to_feed: true
+  share_to_story: false
+  allow_comments: true
+  allow_duet: false
+  allow_stitch: false
+
+# Validation rules
+validation:
+  aspect_ratio_vertical: true
+  duration_reel_limits: true
+  caption_has_hashtags: true
+  video_codec_supported: true
+  resolution_minimum: true
+
+# Transformation rules
+transformations:
+  aspect_ratio_correction: crop  # crop, stretch, letterbox
+  resolution_upscaling: true
+  compression_quality: high
+  audio_normalization: true
+  color_correction: true
+
+# AI enhancements
+ai_enhancements:
+  music_suggestions: true
+  effect_suggestions: true
+  caption_improvements: true
+  hashtag_optimization: true
+  thumbnail_generation: false  # Instagram handles this
+
+# Engagement optimization
+engagement:
+  best_posting_times: [9, 11, 15, 19]  # Hours in EST
+  hashtag_categories:
+    - primary: 3      # Core topic hashtags
+    - secondary: 5    # Related hashtags
+    - location: 2     # Location-based if applicable
+    - trending: 5     # Popular trending hashtags

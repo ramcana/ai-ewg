@@ -1,0 +1,113 @@
+# X (Twitter) Platform Policy Configuration
+# Defines content requirements, transformations, and metadata rules for X/Twitter uploads
+
+platform: x
+display_name: X (Twitter)
+icon: 🐦
+
+# Video technical specifications
+video:
+  aspect_ratio: 16:9  # Horizontal format preferred
+  max_duration: 140   # 2 minutes 20 seconds
+  min_duration: 5     # Minimum 5 seconds
+  formats: [mp4, mov]
+  codec: h264
+  resolution:
+    preferred: 1920x1080  # 1080p
+    minimum: 1280x720    # 720p
+  bitrate:
+    video: 8000000  # 8 Mbps
+    audio: 128000   # 128 kbps
+  framerate: 30
+  max_size_mb: 512   # Twitter's file size limit
+
+# Content guidelines and restrictions
+content:
+  allow_ads: false
+  age_restriction: false
+  contains_music: true
+  contains_ads: false
+  sensitive_content: false
+
+# Metadata requirements and templates
+metadata:
+  tweet:
+    max_length: 280
+    template: "{hook_line}\n\n🎙️ {guest} on {show}\n\n{url}"
+    required: true
+
+  hashtags:
+    max_count: 2      # Twitter prefers fewer hashtags
+    sources: [topics, trending]
+    format: space_separated
+    style: camelCase
+    required: false
+
+# Platform-specific features
+features:
+  captions: true
+  thumbnail: true
+  alt_text: true
+  card: summary_large_image
+  thread_support: true
+  poll_attachment: false
+
+# Thumbnail/cover requirements
+thumbnail:
+  required: true
+  formats: [jpg, png, gif]
+  max_size_mb: 5
+  aspect_ratio: 16:9
+  resolution:
+    minimum: 1200x675
+    recommended: 1600x900
+
+# Upload settings
+upload:
+  media_category: tweet_video
+  sensitive_media: false
+  allow_download: true
+  geo_tag: false
+
+# Validation rules
+validation:
+  tweet_length_limit: true
+  video_duration_limit: true
+  file_size_limit: true
+  aspect_ratio_preferred: false  # Twitter accepts various ratios
+  codec_supported: true
+
+# Transformation rules
+transformations:
+  aspect_ratio_correction: stretch  # stretch, crop, letterbox
+  resolution_upscaling: true
+  compression_quality: high
+  audio_normalization: true
+  color_correction: false
+
+# AI enhancements
+ai_enhancements:
+  caption_suggestions: true
+  hashtag_recommendations: true
+  timing_optimization: true
+  audience_targeting: true
+
+# Engagement optimization
+engagement:
+  best_posting_times: [8, 12, 17, 21]  # Hours in EST
+  content_types:
+    - educational: true
+    - entertaining: true
+    - controversial: false  # Avoid for brand safety
+    - timely: true
+  optimal_length:
+    tweet: 71-100  # Characters for max engagement
+    video: 45-60   # Seconds for completion rate
+
+# Twitter-specific features
+twitter_features:
+  spaces_integration: false
+  fleet_support: false
+  tip_jar: false
+  super_follows: false
+  communities: false

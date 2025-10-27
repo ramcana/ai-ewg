@@ -211,7 +211,8 @@ def register_clip_endpoints(app: FastAPI):
         except Exception as e:
             logger.error(f"Error discovering clips", 
                         episode_id=episode_id, 
-                        error=str(e))
+                        error=str(e),
+                        exc_info=True)
             
             return ClipDiscoveryResponse(
                 success=False,
@@ -284,8 +285,17 @@ def register_clip_endpoints(app: FastAPI):
             variant_specs = []
             for variant in request.variants:
                 for aspect_ratio in request.aspect_ratios:
-                    # Generate output path
-                    output_path = f"data/outputs/{clip.episode_id}/clips/{clip.id}/{aspect_ratio}_{variant}.mp4"
+                    # Generate output path using naming service
+                    from ...core.naming_service import get_naming_service
+                    naming_service = get_naming_service()
+                    
+                    episode_folder = naming_service.get_episode_folder_path(
+                        episode_id=clip.episode_id,
+                        show_name=episode.enrichment.show_name if episode.enrichment else None,
+                        date=episode.created_at
+                    )
+                    
+                    output_path = str(episode_folder / "clips" / clip.id / f"{aspect_ratio}_{variant}.mp4")
                     
                     variant_spec = ClipVariantSpec(
                         variant=variant,
@@ -307,10 +317,10 @@ def register_clip_endpoints(app: FastAPI):
                 variants=variant_specs
             )
             
-            # Render clip assets
+            # Render clip assets (resolve relative path to absolute)
             assets = export_system.render_clip(
                 clip_spec=clip_spec,
-                source_path=episode.source.path,
+                source_path=str(episode.source.get_absolute_path()),
                 transcript=episode.transcription
             )
             
@@ -427,11 +437,11 @@ def register_clip_endpoints(app: FastAPI):
             if not episode.source or not episode.source.path:
                 raise HTTPException(status_code=400, detail=f"Episode {episode_id} has no source video path")
             
-            # Check if source file exists
+            # Check if source file exists (resolve relative path to absolute)
             from pathlib import Path
-            source_path = Path(episode.source.path)
+            source_path = episode.source.get_absolute_path()
             if not source_path.exists():
-                raise HTTPException(status_code=400, detail=f"Source video file not found: {episode.source.path}")
+                raise HTTPException(status_code=400, detail=f"Source video file not found: {source_path}")
             
             # Process clips
             results = []
@@ -470,8 +480,17 @@ def register_clip_endpoints(app: FastAPI):
                     variant_specs = []
                     for variant in request.variants:
                         for aspect_ratio in request.aspect_ratios:
-                            # Generate output path
-                            output_path = f"data/outputs/{clip.episode_id}/clips/{clip.id}/{aspect_ratio}_{variant}.mp4"
+                            # Generate output path using naming service
+                            from ...core.naming_service import get_naming_service
+                            naming_service = get_naming_service()
+                            
+                            episode_folder = naming_service.get_episode_folder_path(
+                                episode_id=clip.episode_id,
+                                show_name=episode.enrichment.show_name if episode.enrichment else None,
+                                date=episode.created_at
+                            )
+                            
+                            output_path = str(episode_folder / "clips" / clip.id / f"{aspect_ratio}_{variant}.mp4")
                             
                             variant_spec = ClipVariantSpec(
                                 variant=variant,
@@ -493,10 +512,10 @@ def register_clip_endpoints(app: FastAPI):
                         variants=variant_specs
                     )
                     
-                    # Render clip assets
+                    # Render clip assets (resolve relative path to absolute)
                     assets = export_system.render_clip(
                         clip_spec=clip_spec,
-                        source_path=episode.source.path,
+                        source_path=str(episode.source.get_absolute_path()),
                         transcript=episode.transcription
                     )
                     
