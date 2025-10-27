@@ -542,19 +542,49 @@ class PipelineOrchestrator:
             # Update episode with enrichment data
             episode.enrichment = enrichment_result
             
-            # Also update episode title and show from AI extraction if not set
-            if enrichment_result.show_name and not episode.show:
-                episode.show = enrichment_result.show_name
-            
-            if enrichment_result.show_name and not episode.title:
-                episode.title = enrichment_result.show_name
+            # Regenerate episode ID if we have show name from AI
+            old_episode_id = episode_id
+            if enrichment_result.show_name:
+                from .naming_service import get_naming_service
+                import re
+                naming_service = get_naming_service()
+                
+                # Try to extract episode number from enrichment or filename
+                episode_number = enrichment_result.episode_number
+                
+                # If no episode number from AI, try to extract from filename
+                if not episode_number and episode.source and episode.source.path:
+                    filename = Path(episode.source.path).stem
+                    # Look for patterns like FD1314, EP140, etc.
+                    match = re.search(r'(?:FD|EP|E)?(\d{3,4})', filename, re.IGNORECASE)
+                    if match:
+                        episode_number = match.group(1)
+                        self.logger.info("Extracted episode number from filename",
+                                       filename=filename,
+                                       episode_number=episode_number)
+                
+                new_episode_id = naming_service.generate_episode_id(
+                    show_name=enrichment_result.show_name,
+                    episode_number=episode_number,
+                    date=episode.created_at or datetime.now()
+                )
+                
+                # Only update if ID actually changed
+                if new_episode_id != old_episode_id:
+                    self.logger.info("Regenerating episode ID with AI metadata",
+                                   old_id=old_episode_id,
+                                   new_id=new_episode_id,
+                                   show_name=enrichment_result.show_name,
+                                   episode_number=episode_number)
+                    
+                    episode.episode_id = new_episode_id
+                    episode_id = new_episode_id
+                    
+                    # TODO: In future, rename files and update paths here
+                    # For now, just update the database
             
             # Save to database
-            self.registry.update_episode_data(episode_id, {
-                'enrichment': enrichment_result.to_dict(),
-                'show': episode.show,
-                'title': episode.title
-            })
+            self.registry.update_episode_data(episode)
             
             self.logger.info("Enrichment stage completed",
                            episode_id=episode_id,
