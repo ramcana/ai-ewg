@@ -508,8 +508,58 @@ class PipelineOrchestrator:
         self._stage_data[episode_id]['enrichment'] = result
         
         if result['success']:
+            # Create EnrichmentResult object and save to episode
+            from ..core.models import EnrichmentResult
+            
+            enrichment_data = result.get('enrichment_data', {})
+            ai_analysis = enrichment_data.get('ai_analysis', {})
+            summary_data = enrichment_data.get('summary', {})
+            
+            enrichment_result = EnrichmentResult(
+                # Intelligence Chain V2 results
+                diarization=enrichment_data.get('diarization'),
+                entities=enrichment_data.get('entities'),
+                proficiency_scores=enrichment_data.get('proficiency_scores'),
+                enriched_guests=enrichment_data.get('enriched_guests'),
+                
+                # AI-extracted metadata
+                show_name=enrichment_data.get('show_name_extracted'),
+                host_name=enrichment_data.get('host_name_extracted'),
+                
+                # AI analysis
+                executive_summary=ai_analysis.get('executive_summary'),
+                key_takeaways=ai_analysis.get('key_takeaways', []),
+                deep_analysis=ai_analysis.get('deep_analysis'),
+                topics=ai_analysis.get('topics', []),
+                segment_titles=ai_analysis.get('segment_titles', []),
+                
+                # Summary for display
+                summary=summary_data.get('key_takeaway'),
+                description=summary_data.get('description'),
+                tags=summary_data.get('tags', [])
+            )
+            
+            # Update episode with enrichment data
+            episode.enrichment = enrichment_result
+            
+            # Also update episode title and show from AI extraction if not set
+            if enrichment_result.show_name and not episode.show:
+                episode.show = enrichment_result.show_name
+            
+            if enrichment_result.show_name and not episode.title:
+                episode.title = enrichment_result.show_name
+            
+            # Save to database
+            self.registry.update_episode_data(episode_id, {
+                'enrichment': enrichment_result.to_dict(),
+                'show': episode.show,
+                'title': episode.title
+            })
+            
             self.logger.info("Enrichment stage completed",
-                           episode_id=episode_id)
+                           episode_id=episode_id,
+                           show_name=enrichment_result.show_name,
+                           host_name=enrichment_result.host_name)
     
     async def _process_rendering_stage(self, episode_id: str) -> None:
         """Process rendering stage - generate web artifacts"""
@@ -745,13 +795,23 @@ class PipelineOrchestrator:
                 # Extract video duration using ffprobe
                 duration = self._get_video_duration(video_file)
                 
+                # Store relative path from project root to make database portable
+                try:
+                    # Get project root (where pipeline.py is: src/core/pipeline.py -> 2 levels up)
+                    project_root = Path(__file__).parent.parent.parent.resolve()
+                    relative_path = video_file.relative_to(project_root)
+                    source_path = str(relative_path).replace('\\', '/')
+                except ValueError:
+                    # File is outside project root, store absolute path
+                    source_path = str(video_file).replace('\\', '/')
+                
                 # Create episode object
                 episode = EpisodeObject(
                     episode_id=episode_id,
                     content_hash=file_hash,
                     processing_stage=ProcessingStage.DISCOVERED,
                     source=SourceInfo(
-                        path=str(video_file),
+                        path=source_path,
                         file_size=file_size,
                         last_modified=last_modified
                     ),
@@ -861,9 +921,40 @@ class PipelineOrchestrator:
         """List episodes with optional filtering"""
         try:
             registry = self.get_registry()
-            # This would use registry methods when implemented
-            # For now, return empty list
-            return []
+            
+            # Get all episodes from registry
+            all_episodes = registry.list_episodes()
+            
+            # Filter by stage if specified
+            if stage_filter:
+                all_episodes = [ep for ep in all_episodes if ep.processing_stage == stage_filter]
+            
+            # Limit results
+            episodes = all_episodes[:limit]
+            
+            # Convert to dict format for API response
+            result = []
+            for ep in episodes:
+                episode_dict = {
+                    'episode_id': ep.episode_id,
+                    'stage': ep.processing_stage.value if ep.processing_stage else 'unknown',
+                    'source_path': ep.source.path if ep.source else '',
+                    'file_size': ep.source.file_size if ep.source else 0,
+                    'show_name': ep.metadata.show_name if ep.metadata else 'Unknown',
+                    'title': ep.metadata.title if ep.metadata else ep.episode_id,
+                    'show': ep.metadata.show_name if ep.metadata else None,
+                    'duration': ep.media.duration_seconds if ep.media else 0,
+                    'created_at': ep.created_at.isoformat() if ep.created_at else None,
+                    'updated_at': ep.updated_at.isoformat() if ep.updated_at else None,
+                    'errors': ep.errors,
+                    'metadata': ep.metadata.to_dict() if ep.metadata else None,
+                    'enrichment': ep.enrichment.to_dict() if ep.enrichment else None,
+                    'transcription': ep.transcription.to_dict() if ep.transcription else None
+                }
+                result.append(episode_dict)
+            
+            return result
+            
         except Exception as e:
             self.logger.error(f"Error listing episodes", error=str(e))
             return []

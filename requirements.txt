@@ -1,66 +1,56 @@
-# Core Video Processing Pipeline Dependencies
-# Install with: pip install -r requirements.txt
+# Core dependencies for Content Publishing Platform
+pyyaml>=6.0
+requests>=2.28.0
+python-dateutil>=2.8.0
 
-# HTTP client for Ollama API
-httpx>=0.27.0
+# GUI Control Panel dependencies
+streamlit>=1.28.0
+streamlit-authenticator>=0.2.3
+pandas>=1.5.0
 
-# Core Python libraries  
-pyyaml>=6.0.1
-python-dotenv>=1.0.0
+# HTML/XML processing
+lxml>=4.9.0
+beautifulsoup4>=4.11.0
 
-# CLI Framework
-typer[all]>=0.12.0
-rich>=13.7.0
+# System monitoring
+psutil>=5.9.0
 
-# Settings Management
-pydantic>=2.5.0
-pydantic-settings>=2.3.0
+# Optional dependencies for full functionality
+# Uncomment as needed:
 
-# Transcription
-openai-whisper>=20231117
-faster-whisper>=1.0.0
+# Database support
+# sqlalchemy>=1.4.0
+# sqlite3  # Built into Python
 
-# Audio/Video Processing
-ffmpeg-python>=0.2.0
-pillow>=10.0.0
+# Image processing (for thumbnails)
+# Pillow>=9.0.0
 
-# AI & NLP
-# Note: Ollama runs as a separate service - no Python package needed
-# Just ensure Ollama is installed and running: https://ollama.ai
+# Video processing (for media normalization)
+# ffmpeg-python>=0.2.0
 
-# Database
-sqlalchemy>=2.0.0
-aiosqlite>=0.19.0
-sqlmodel>=0.0.21  # SQLAlchemy + Pydantic integration
+# Advanced text processing
+# nltk>=3.8
+# spacy>=3.4.0
 
-# Web & API
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-jinja2>=3.1.0
-requests>=2.32.0
-requests-cache>=1.2.0  # Entity disambiguation caching
+# Cloud services
+# boto3>=1.26.0  # AWS
+# google-cloud-storage>=2.7.0  # Google Cloud
+# azure-storage-blob>=12.14.0  # Azure
 
-# Logging & Monitoring
-structlog>=24.1.0
-python-json-logger>=2.0.7
+# Social media APIs
+# google-api-python-client>=2.70.0  # YouTube
+# facebook-sdk>=3.1.0  # Facebook/Instagram
+# tweepy>=4.12.0  # Twitter
 
-# Testing
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
-pytest-cov>=4.1.0
+# Analytics
+# google-analytics-data>=0.16.0
 
-# Utilities
-tqdm>=4.66.0
+# CDN providers
+# cloudflare>=2.11.0
 
-# Optional: Speaker Diarization (Phase 2)
-# pyannote.audio>=3.0.0  # Requires HuggingFace token
-# speechbrain>=0.5.0
-
-# Clip Generation Dependencies
-sentence-transformers>=2.2.0  # Sentence embeddings
-ruptures>=1.1.0  # Change point detection for topic segmentation
-scikit-learn>=1.3.0  # For cosine distance calculations
-
-# NLP & Entity Extraction (Required for clip generation)
-spacy>=3.7.0
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
+# Development and testing
+# pytest>=7.2.0
+# pytest-cov>=4.0.0
+# black>=22.0.0
+# flake8>=6.0.0
+# mypy>=1.0.0

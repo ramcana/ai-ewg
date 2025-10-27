@@ -40,6 +40,24 @@ class SourceInfo:
     last_modified: datetime
     source_type: str = "local"  # local, unc, external
     
+    def get_absolute_path(self) -> Path:
+        """
+        Get absolute path to source file, resolving relative paths from project root
+        
+        Returns:
+            Path: Absolute path to source file
+        """
+        path_obj = Path(self.path)
+        
+        # If already absolute, return as-is
+        if path_obj.is_absolute():
+            return path_obj
+        
+        # Resolve relative path from project root
+        # Project root is where models.py is located: src/core/models.py -> 2 levels up
+        project_root = Path(__file__).parent.parent.parent.resolve()
+        return (project_root / path_obj).resolve()
+    
     def to_dict(self) -> Dict[str, Any]:
         return {
             'path': self.path,
@@ -135,17 +153,39 @@ class TranscriptionResult:
 @dataclass
 class EnrichmentResult:
     """Result of AI enrichment processing"""
+    # Intelligence Chain V2 results
     diarization: Optional[Dict[str, Any]] = None
     entities: Optional[Dict[str, Any]] = None
     disambiguation: Optional[Dict[str, Any]] = None
     proficiency_scores: Optional[Dict[str, Any]] = None
+    
+    # AI-extracted metadata
+    show_name: Optional[str] = None
+    host_name: Optional[str] = None
+    episode_number: Optional[str] = None
+    
+    # AI analysis
+    executive_summary: Optional[str] = None
+    key_takeaways: List[str] = field(default_factory=list)
+    deep_analysis: Optional[str] = None
+    topics: List[str] = field(default_factory=list)
+    segment_titles: List[str] = field(default_factory=list)
+    
+    # Summary for display
+    summary: Optional[str] = None
+    description: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    
+    # Guest information
+    enriched_guests: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'EnrichmentResult':
-        return cls(**data)
+        # Handle legacy data that might not have all fields
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
 @dataclass

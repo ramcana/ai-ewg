@@ -76,6 +76,12 @@ class EpisodeStatusResponse(BaseModel):
     source_path: str
     file_size: int
     show_name: str
+    title: Optional[str] = None
+    show: Optional[str] = None
+    duration: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+    enrichment: Optional[Dict[str, Any]] = None
+    transcription: Optional[Dict[str, Any]] = None
 
 
 class SystemHealthResponse(BaseModel):
