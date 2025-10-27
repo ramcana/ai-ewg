@@ -1,0 +1,80 @@
+platforms:
+  youtube:
+    platform_name: "YouTube"
+    platform_id: "youtube"
+    enabled: true
+    api_version: "v3"
+    video:
+      max_duration: "PT12H" # 12 hours
+      min_duration: "PT1S" # 1 second
+      resolutions: ["1920x1080", "1280x720", "854x480", "640x360"]
+      codecs: ["h264", "h265"]
+      max_bitrate: "50Mbps"
+      max_file_size: "256GB"
+      aspect_ratios: ["16:9", "9:16", "1:1", "4:3"]
+    audio:
+      codecs: ["aac", "mp3"]
+      loudness_target: "-14 LUFS"
+      loudness_range: "-23 to -14 LUFS"
+      sample_rates: [44100, 48000]
+      bitrates: ["128kbps", "192kbps", "320kbps"]
+    metadata:
+      title_max_length: 100
+      title_min_length: 1
+      description_max_length: 5000
+      tags_max_count: 500
+      tag_max_length: 30
+      supports_captions: true
+      supports_thumbnails: true
+      thumbnail_formats: ["jpg", "png"]
+
+  instagram:
+    platform_name: "Instagram"
+    platform_id: "instagram"
+    enabled: true
+    video:
+      max_duration: "PT60S" # 60 seconds for reels
+      min_duration: "PT3S" # 3 seconds
+      resolutions: ["1080x1920", "1080x1080", "1080x608"]
+      codecs: ["h264"]
+      max_bitrate: "10Mbps"
+      max_file_size: "4GB"
+      aspect_ratios: ["9:16", "1:1", "16:9"]
+    audio:
+      codecs: ["aac"]
+      loudness_target: "-16 LUFS"
+      sample_rates: [44100, 48000]
+      bitrates: ["128kbps", "192kbps"]
+    metadata:
+      title_max_length: 150
+      description_max_length: 2200
+      tags_max_count: 30
+      tag_max_length: 100
+      supports_captions: false # Burn-in required
+      supports_thumbnails: true
+      thumbnail_formats: ["jpg"]
+
+  tiktok:
+    platform_name: "TikTok"
+    platform_id: "tiktok"
+    enabled: false # Optional platform
+    video:
+      max_duration: "PT180S" # 3 minutes
+      min_duration: "PT15S" # 15 seconds
+      resolutions: ["1080x1920", "720x1280"]
+      codecs: ["h264"]
+      max_bitrate: "8Mbps"
+      max_file_size: "287MB"
+      aspect_ratios: ["9:16"]
+    audio:
+      codecs: ["aac"]
+      loudness_target: "-16 LUFS"
+      sample_rates: [44100, 48000]
+      bitrates: ["128kbps"]
+    metadata:
+      title_max_length: 150
+      description_max_length: 2200
+      tags_max_count: 100
+      supports_captions: false
+      supports_thumbnails: true
+      thumbnail_formats: ["jpg"]

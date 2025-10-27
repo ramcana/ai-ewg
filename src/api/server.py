@@ -14,7 +14,6 @@ from typing import Optional
 
 from ..core import PipelineOrchestrator, ConfigurationManager, get_logger
 from .endpoints import register_endpoints
-from .async_processing import register_async_endpoints
 
 logger = get_logger('pipeline.api')
 
@@ -139,8 +138,8 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     register_endpoints(app)
     
     # Register async processing endpoints
-    from .endpoints import get_orchestrator
-    register_async_endpoints(app, get_orchestrator)
+    from .async_endpoints import register_async_endpoints
+    register_async_endpoints(app)
     
     return app
 

@@ -462,6 +462,37 @@ class EpisodeRegistry:
                         error=str(e))
             raise DatabaseError(f"Failed to check episode existence: {e}")
     
+    def list_episodes(self) -> List[EpisodeObject]:
+        """
+        List all episodes in the registry
+        
+        Returns:
+            List of all episode objects ordered by most recently updated
+        """
+        try:
+            cursor = self.connection.execute_query(
+                "SELECT * FROM episodes ORDER BY updated_at DESC"
+            )
+            
+            episodes = []
+            for row in cursor.fetchall():
+                try:
+                    episode = self._row_to_episode(row)
+                    episodes.append(episode)
+                except Exception as row_error:
+                    logger.error("Failed to parse episode row", 
+                               episode_id=row.get('id', 'unknown') if hasattr(row, 'get') else row['id'],
+                               error=str(row_error),
+                               exc_info=True)
+                    # Continue with other episodes instead of failing completely
+                    continue
+            
+            return episodes
+            
+        except Exception as e:
+            logger.error("Failed to list episodes", error=str(e), exc_info=True)
+            raise DatabaseError(f"Failed to list episodes: {e}")
+    
     def get_all_episode_ids(self) -> Set[str]:
         """
         Get set of all existing episode IDs for uniqueness validation
@@ -658,24 +689,121 @@ class EpisodeRegistry:
     def _row_to_episode(self, row: sqlite3.Row) -> EpisodeObject:
         """Convert database row to EpisodeObject"""
         try:
-            metadata_dict = json.loads(row['metadata'])
-            episode = EpisodeObject.from_dict(metadata_dict)
+            from .models import SourceInfo, MediaInfo, EpisodeMetadata, EnrichmentResult, TranscriptionResult
             
-            # Override with current database values
-            episode.processing_stage = ProcessingStage(row['stage'])
-            episode.errors = row['errors']
-            if row['created_at']:
-                episode.created_at = datetime.fromisoformat(row['created_at'])
-            if row['updated_at']:
-                episode.updated_at = datetime.fromisoformat(row['updated_at'])
+            episode_id = row['id']
+            logger.debug(f"Parsing episode {episode_id}")
+            
+            # Parse metadata JSON
+            metadata_dict = json.loads(row['metadata']) if row['metadata'] else {}
+            logger.debug(f"Metadata parsed for {episode_id}")
+            
+            # Create SourceInfo
+            last_mod = None
+            if 'last_modified' in row.keys() and row['last_modified']:
+                try:
+                    last_mod = datetime.fromisoformat(row['last_modified'])
+                except:
+                    pass
+                    
+            source = SourceInfo(
+                path=row['source_path'],
+                file_size=row['file_size'] or 0,
+                last_modified=last_mod
+            )
+            
+            # Create MediaInfo
+            duration_seconds = 0
+            if 'duration' in row.keys() and row['duration']:
+                duration_seconds = row['duration']
+            elif 'duration_seconds' in row.keys() and row['duration_seconds']:
+                duration_seconds = row['duration_seconds']
+                
+            media = MediaInfo(
+                duration_seconds=duration_seconds,
+                video_codec=metadata_dict.get('video_codec') or metadata_dict.get('codec'),
+                audio_codec=metadata_dict.get('audio_codec'),
+                resolution=metadata_dict.get('resolution'),
+                bitrate=metadata_dict.get('bitrate'),
+                frame_rate=metadata_dict.get('frame_rate') or metadata_dict.get('framerate')
+            )
+            
+            # Create EpisodeMetadata
+            title = row['id']
+            if 'title' in row.keys() and row['title']:
+                title = row['title']
+            elif 'title' in metadata_dict:
+                title = metadata_dict['title']
+                
+            show = 'Unknown'
+            if 'show' in row.keys() and row['show']:
+                show = row['show']
+            elif 'show' in metadata_dict:
+                show = metadata_dict['show']
+                
+            episode_metadata = EpisodeMetadata(
+                title=title,
+                show_name=show,
+                show_slug=metadata_dict.get('show_slug', show.lower().replace(' ', '-') if show else 'unknown'),
+                season=metadata_dict.get('season'),
+                episode=metadata_dict.get('episode'),
+                date=metadata_dict.get('date') or metadata_dict.get('air_date'),
+                topic=metadata_dict.get('topic'),
+                topic_slug=metadata_dict.get('topic_slug'),
+                description=metadata_dict.get('description')
+            )
+            
+            # Parse enrichment if exists
+            enrichment = None
+            if 'enrichment' in row.keys() and row['enrichment']:
+                try:
+                    enrichment_dict = json.loads(row['enrichment']) if isinstance(row['enrichment'], str) else row['enrichment']
+                    enrichment = EnrichmentResult.from_dict(enrichment_dict)
+                except Exception as e:
+                    logger.warning(f"Failed to parse enrichment for {row['id']}: {e}")
+            elif metadata_dict.get('enrichment'):
+                try:
+                    enrichment = EnrichmentResult.from_dict(metadata_dict['enrichment'])
+                except Exception as e:
+                    logger.warning(f"Failed to parse enrichment from metadata for {row['id']}: {e}")
+            
+            # Parse transcription if exists
+            transcription = None
+            if 'transcription' in row.keys() and row['transcription']:
+                try:
+                    trans_dict = json.loads(row['transcription']) if isinstance(row['transcription'], str) else row['transcription']
+                    transcription = TranscriptionResult.from_dict(trans_dict)
+                except Exception as e:
+                    logger.warning(f"Failed to parse transcription for {row['id']}: {e}")
+            elif metadata_dict.get('transcription'):
+                try:
+                    transcription = TranscriptionResult.from_dict(metadata_dict['transcription'])
+                except Exception as e:
+                    logger.warning(f"Failed to parse transcription from metadata for {row['id']}: {e}")
+            
+            # Create EpisodeObject
+            episode = EpisodeObject(
+                episode_id=row['id'],
+                content_hash=row['hash'],
+                source=source,
+                media=media,
+                metadata=episode_metadata,
+                processing_stage=ProcessingStage(row['stage']),
+                transcription=transcription,
+                enrichment=enrichment,
+                errors=row['errors'],
+                created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
+                updated_at=datetime.fromisoformat(row['updated_at']) if row['updated_at'] else None
+            )
             
             return episode
             
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error("Failed to parse episode data from database",
-                        episode_id=row.get('id', 'unknown'),
-                        error=str(e))
-            raise DatabaseError(f"Failed to parse episode data: {e}")
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"Failed to parse episode data from database: {type(e).__name__}: {str(e)}\n{error_details}",
+                        episode_id=row['id'] if 'id' in row.keys() else 'unknown')
+            raise DatabaseError(f"Failed to parse episode data: {type(e).__name__}: {e}")
     
     def _log_processing_event(self, conn: sqlite3.Connection, episode_id: str, 
                             stage: str, status: str, 
