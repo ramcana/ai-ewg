@@ -472,7 +472,7 @@ class SocialMediaPackageGenerator:
             
             # Find media files (clips)
             media_files = []
-            clips_dir = Path("data/outputs") / episode_id / "clips"
+            clips_dir = Path("data/clips") / episode_id
             if clips_dir.exists():
                 for clip_file in clips_dir.glob("*.mp4"):
                     media_files.append(str(clip_file))
@@ -577,24 +577,39 @@ class SocialMediaPackageGenerator:
 
 def render_social_package_generation_interface():
     """
-    Render social media package generation interface
+    Render social media package generation interface with job tracking
     """
     st.subheader("📱 Social Media Package Generation")
     
     st.write("""
-    Generate platform-specific social media packages with captions and hashtags 
-    based on episode metadata, guest information, and content topics.
+    Generate platform-specific social media packages with AI-powered captions, hashtags,
+    and optimized content formatting. Track generation progress in real-time.
     """)
     
-    # Initialize generator
+    # Add tabs for generation and monitoring
+    tab1, tab2 = st.tabs(["🚀 Generate Packages", "📊 Job Monitor"])
+    
+    with tab1:
+        render_package_generation_tab()
+    
+    with tab2:
+        render_job_monitoring_tab()
+
+
+def render_package_generation_tab():
+    """
+    Render the package generation tab
+    """
+    
+    # Initialize components
     generator = SocialMediaPackageGenerator()
+    api_client = create_api_client()
     
     # Episode selection
-    st.markdown("### Select Episode")
+    st.markdown("### 1️⃣ Select Episode")
     
-    # Load episodes
-    api_client = create_api_client()
-    response = api_client.list_episodes(limit=20)
+    # Load episodes from API
+    response = api_client.list_episodes(limit=50)
     
     if not response.success or not response.data:
         st.error("Failed to load episodes. Please check API connection.")
@@ -622,26 +637,48 @@ def render_social_package_generation_interface():
     
     selected_episode_id = episode_options[selected_display]
     
-    # Platform selection
-    st.markdown("### Select Platforms")
+    # Platform selection with enhanced UI
+    st.markdown("### 2️⃣ Select Platforms")
+    
+    # Map old platform names to new API names
+    platform_mapping = {
+        'twitter': 'x',
+        'instagram': 'instagram',
+        'tiktok': 'tiktok',
+        'facebook': 'facebook'
+    }
+    
+    # Get platform requirements from API
+    import requests
+    try:
+        platforms_response = requests.get(f"{api_client.base_url}/social/platforms")
+        available_platforms = platforms_response.json() if platforms_response.ok else ['youtube', 'instagram', 'x', 'tiktok', 'facebook']
+    except:
+        available_platforms = ['youtube', 'instagram', 'x', 'tiktok', 'facebook']
     
     platform_configs = generator.platform_configs
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        twitter_enabled = st.checkbox(f"{platform_configs['twitter']['icon']} Twitter", value=True)
-        instagram_enabled = st.checkbox(f"{platform_configs['instagram']['icon']} Instagram", value=True)
+        youtube_enabled = st.checkbox("🎥 YouTube", value=True, help="16:9 landscape videos, up to 10 minutes")
+        instagram_enabled = st.checkbox(f"{platform_configs['instagram']['icon']} Instagram", value=True, help="9:16 vertical Reels, up to 90 seconds")
     
     with col2:
-        tiktok_enabled = st.checkbox(f"{platform_configs['tiktok']['icon']} TikTok", value=False)
-        facebook_enabled = st.checkbox(f"{platform_configs['facebook']['icon']} Facebook", value=True)
+        x_enabled = st.checkbox("🐦 X (Twitter)", value=True, help="16:9 landscape, up to 2:20 minutes")
+        tiktok_enabled = st.checkbox(f"{platform_configs['tiktok']['icon']} TikTok", value=False, help="9:16 vertical, up to 3 minutes")
     
+    with col3:
+        facebook_enabled = st.checkbox(f"{platform_configs['facebook']['icon']} Facebook", value=True, help="16:9 landscape, up to 4 minutes")
+    
+    # Build selected platforms list with API names
     selected_platforms = []
-    if twitter_enabled:
-        selected_platforms.append('twitter')
+    if youtube_enabled:
+        selected_platforms.append('youtube')
     if instagram_enabled:
         selected_platforms.append('instagram')
+    if x_enabled:
+        selected_platforms.append('x')
     if tiktok_enabled:
         selected_platforms.append('tiktok')
     if facebook_enabled:
@@ -651,37 +688,48 @@ def render_social_package_generation_interface():
         st.warning("Please select at least one platform.")
         return
     
-    # Generation controls
-    st.markdown("### Generate Packages")
+    # Generation controls with API integration
+    st.markdown("### 3️⃣ Generate Packages")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🚀 Generate Social Packages", type="primary", width="stretch"):
-            with st.spinner("Generating social media packages..."):
-                results = generator.generate_packages_for_episode(selected_episode_id, selected_platforms)
-                
-                # Display results
-                st.markdown("### Generation Results")
-                
-                success_count = sum(1 for success in results.values() if success)
-                total_count = len(results)
-                
-                if success_count == total_count:
-                    st.success(f"✅ Successfully generated {success_count}/{total_count} packages!")
-                elif success_count > 0:
-                    st.warning(f"⚠️ Generated {success_count}/{total_count} packages (some failed)")
-                else:
-                    st.error("❌ Failed to generate any packages")
-                
-                # Show detailed results
-                for platform, success in results.items():
-                    config = platform_configs[platform]
-                    status_icon = "✅" if success else "❌"
-                    st.write(f"{status_icon} {config['icon']} {config['name']}")
+        if st.button("🚀 Generate Social Packages", type="primary", use_container_width=True):
+            with st.spinner("Submitting package generation job..."):
+                try:
+                    # Call new API endpoint
+                    import requests
+                    response = requests.post(
+                        f"{api_client.base_url}/social/generate",
+                        json={
+                            "episode_id": selected_episode_id,
+                            "platforms": selected_platforms,
+                            "metadata_overrides": None
+                        }
+                    )
+                    
+                    if response.ok:
+                        result = response.json()
+                        job_id = result.get('job_id')
+                        
+                        st.success(f"✅ Job submitted successfully!")
+                        st.info(f"**Job ID:** `{job_id}`")
+                        st.info(f"**Platforms:** {', '.join(selected_platforms)}")
+                        st.info("Switch to the 'Job Monitor' tab to track progress.")
+                        
+                        # Store job_id in session state for monitoring
+                        if 'social_jobs' not in st.session_state:
+                            st.session_state['social_jobs'] = []
+                        st.session_state['social_jobs'].append(job_id)
+                        
+                    else:
+                        st.error(f"❌ Failed to submit job: {response.text}")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error submitting job: {str(e)}")
     
     with col2:
-        if st.button("👁️ Preview Packages", width="stretch"):
+        if st.button("👁️ Preview Packages", use_container_width=True):
             # Show preview of what would be generated
             st.markdown("### Package Preview")
             
@@ -737,6 +785,120 @@ def render_social_package_generation_interface():
                                     st.warning(f"• {warning.message}")
             else:
                 st.error("Could not load episode metadata for preview")
+
+
+def render_job_monitoring_tab():
+    """
+    Render the job monitoring tab with real-time progress tracking
+    """
+    st.markdown("### Active Jobs")
+    
+    api_client = create_api_client()
+    
+    # Auto-refresh toggle
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.write("Monitor social media package generation jobs in real-time.")
+    with col2:
+        auto_refresh = st.checkbox("Auto-refresh", value=True)
+    
+    if auto_refresh:
+        st.info("🔄 Auto-refreshing every 3 seconds...")
+        import time
+        time.sleep(3)
+        st.rerun()
+    
+    # Fetch jobs from API
+    try:
+        import requests
+        response = requests.get(f"{api_client.base_url}/social/jobs?limit=20")
+        
+        if not response.ok:
+            st.error(f"Failed to fetch jobs: {response.text}")
+            return
+        
+        jobs = response.json()
+        
+        if not jobs:
+            st.info("No jobs found. Generate some packages to see them here!")
+            return
+        
+        # Display jobs
+        for job in jobs:
+            job_id = job['job_id']
+            episode_id = job['episode_id']
+            platforms = job['platforms']
+            status = job['status']
+            progress = job['progress']
+            created_at = job['created_at']
+            
+            # Status color coding
+            status_colors = {
+                'pending': '🟡',
+                'processing': '🔵',
+                'completed': '🟢',
+                'failed': '🔴',
+                'cancelled': '⚫'
+            }
+            status_icon = status_colors.get(status, '⚪')
+            
+            with st.expander(f"{status_icon} {job_id} - {episode_id} ({status.upper()})", expanded=(status == 'processing')):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**Episode:** {episode_id}")
+                    st.write(f"**Platforms:** {', '.join(platforms)}")
+                    st.write(f"**Status:** {status}")
+                
+                with col2:
+                    st.write(f"**Created:** {created_at}")
+                    st.write(f"**Progress:** {progress:.1f}%")
+                
+                # Progress bar
+                if status == 'processing':
+                    st.progress(progress / 100.0)
+                
+                # Show packages generated
+                packages_generated = job.get('packages_generated', {})
+                if packages_generated:
+                    st.markdown("**✅ Packages Generated:**")
+                    for platform, path in packages_generated.items():
+                        st.write(f"- {platform}: `{path}`")
+                
+                # Show errors
+                errors = job.get('errors', {})
+                if errors:
+                    st.markdown("**❌ Errors:**")
+                    for platform, error in errors.items():
+                        st.error(f"{platform}: {error}")
+                
+                # Show warnings
+                warnings = job.get('warnings', [])
+                if warnings:
+                    st.markdown("**⚠️ Warnings:**")
+                    for warning in warnings:
+                        st.warning(warning)
+        
+        # Stats summary
+        st.markdown("---")
+        st.markdown("### Job Statistics")
+        
+        stats_response = requests.get(f"{api_client.base_url}/social/stats")
+        if stats_response.ok:
+            stats = stats_response.json()
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Jobs", stats.get('total', 0))
+            with col2:
+                st.metric("Completed", stats.get('completed', 0))
+            with col3:
+                st.metric("Processing", stats.get('processing', 0))
+            with col4:
+                st.metric("Failed", stats.get('failed', 0))
+        
+    except Exception as e:
+        st.error(f"Error fetching jobs: {str(e)}")
 
 
 # Convenience function for creating generator instance

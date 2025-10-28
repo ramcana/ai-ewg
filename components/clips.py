@@ -164,10 +164,10 @@ def render_clip_parameter_controls(episode_id: str, api_client):
             "Clip Duration Range",
             min_value=20,
             max_value=120,
-            value=(20, 60),
+            value=(20, 120),
             step=5,
             format="%d seconds",
-            help="Set minimum and maximum clip duration in seconds"
+            help="Set minimum and maximum clip duration in seconds (default: 20-120s matches process_clips.py)"
         )
         
         min_duration_ms = duration_range[0] * 1000
@@ -181,16 +181,16 @@ def render_clip_parameter_controls(episode_id: str, api_client):
             value=0.3,
             step=0.05,
             format="%.2f",
-            help="Minimum score for clip selection (higher = more selective)"
+            help="Minimum score for clip selection (0.3 = balanced, lower = more clips, higher = fewer but better clips)"
         )
         
         # Maximum clips
         max_clips = st.number_input(
             "Maximum Clips",
             min_value=1,
-            max_value=10,
-            value=3,
-            help="Maximum number of clips to discover"
+            max_value=20,
+            value=8,
+            help="Maximum number of clips to discover (default: 8 matches process_clips.py)"
         )
     
     with col2:
@@ -663,11 +663,16 @@ def render_clip_generation_monitoring(episode_id: str, api_client):
         total_files = len(metadata_rows)
         successful_files = len([r for r in metadata_rows if r['Status'] == '✅ Ready'])
         failed_files = len([r for r in metadata_rows if r['Status'] == '❌ Missing'])
-        total_size_mb = sum([
-            float(r['File Size'].replace(' MB', '')) 
-            for r in metadata_rows 
-            if 'MB' in r['File Size']
-        ])
+        
+        # Parse file sizes safely
+        total_size_mb = 0
+        for r in metadata_rows:
+            try:
+                # Handle both "29.8 MB" and "29.8MB" formats
+                size_str = r['File Size'].replace(' MB', '').replace('MB', '')
+                total_size_mb += float(size_str)
+            except (ValueError, AttributeError):
+                pass  # Skip invalid entries
         
         with col1:
             st.metric("Total Files", total_files)
