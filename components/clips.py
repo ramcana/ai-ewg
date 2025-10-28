@@ -526,7 +526,25 @@ def check_clip_files_on_disk(episode_id: str) -> Dict[str, Any]:
     Returns:
         Dict with file statistics and details
     """
+    # Try both clip locations
     clips_dir = Path(f"data/clips/{episode_id}")
+    if not clips_dir.exists():
+        # Fall back to data/outputs location
+        outputs_base = Path("data/outputs")
+        if outputs_base.exists():
+            for show_dir in outputs_base.iterdir():
+                if not show_dir.is_dir():
+                    continue
+                for year_dir in show_dir.iterdir():
+                    if not year_dir.is_dir():
+                        continue
+                    for episode_dir in year_dir.iterdir():
+                        if not episode_dir.is_dir():
+                            continue
+                        potential_clips_dir = episode_dir / "clips"
+                        if potential_clips_dir.exists() and episode_id in episode_dir.name:
+                            clips_dir = potential_clips_dir
+                            break
     
     if not clips_dir.exists():
         return {
@@ -625,8 +643,25 @@ def render_clip_generation_monitoring(episode_id: str, api_client):
                 del st.session_state[f'clip_metadata_{episode_id}']
             st.rerun()
     
-    # Check for existing clips
+    # Check for existing clips - try both locations
     clips_dir = Path(f"data/clips/{episode_id}")
+    if not clips_dir.exists():
+        # Fall back to data/outputs location
+        outputs_base = Path("data/outputs")
+        if outputs_base.exists():
+            for show_dir in outputs_base.iterdir():
+                if not show_dir.is_dir():
+                    continue
+                for year_dir in show_dir.iterdir():
+                    if not year_dir.is_dir():
+                        continue
+                    for episode_dir in year_dir.iterdir():
+                        if not episode_dir.is_dir():
+                            continue
+                        potential_clips_dir = episode_dir / "clips"
+                        if potential_clips_dir.exists() and episode_id in episode_dir.name:
+                            clips_dir = potential_clips_dir
+                            break
     
     with col1:
         if clips_dir.exists():
@@ -1020,7 +1055,24 @@ def regenerate_single_clip(episode_id: str, clip_id: str, api_client):
         api_client: API client instance
     """
     # First delete existing files
+    # Try both clip locations
     clips_dir = Path(f"data/clips/{episode_id}/{clip_id}")
+    if not clips_dir.exists():
+        outputs_base = Path("data/outputs")
+        if outputs_base.exists():
+            for show_dir in outputs_base.iterdir():
+                if not show_dir.is_dir():
+                    continue
+                for year_dir in show_dir.iterdir():
+                    if not year_dir.is_dir():
+                        continue
+                    for episode_dir in year_dir.iterdir():
+                        if not episode_dir.is_dir():
+                            continue
+                        potential_clips_dir = episode_dir / "clips" / clip_id
+                        if potential_clips_dir.exists() and episode_id in episode_dir.name:
+                            clips_dir = potential_clips_dir
+                            break
     if clips_dir.exists():
         try:
             import shutil
@@ -1077,8 +1129,26 @@ def regenerate_all_failed_clips(episode_id: str, failed_clips: List[Dict], api_c
         failed_clips: List of failed clip information
         api_client: API client instance
     """
-    # Delete existing files for failed clips
+    # Delete existing files for failed clips - try both locations
     clips_dir = Path(f"data/clips/{episode_id}")
+    if not clips_dir.exists():
+        # Fall back to data/outputs location
+        outputs_base = Path("data/outputs")
+        if outputs_base.exists():
+            for show_dir in outputs_base.iterdir():
+                if not show_dir.is_dir():
+                    continue
+                for year_dir in show_dir.iterdir():
+                    if not year_dir.is_dir():
+                        continue
+                    for episode_dir in year_dir.iterdir():
+                        if not episode_dir.is_dir():
+                            continue
+                        potential_clips_dir = episode_dir / "clips"
+                        if potential_clips_dir.exists() and episode_id in episode_dir.name:
+                            clips_dir = potential_clips_dir
+                            break
+    
     deleted_count = 0
     
     for failed_clip in failed_clips:
