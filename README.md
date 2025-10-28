@@ -27,10 +27,9 @@ streamlit run dashboard.py
 ### 4. **View Results**
 
 ```
-data/outputs/{show_folder}/{year}/{episode_id}/
-├── clips/              # Generated video clips
-├── html/              # Interactive web page
-└── meta/              # Metadata files
+data/clips/{episode_id}/           # Video clips (all aspect ratios)
+data/outputs/{show}/{year}/{episode_id}/  # HTML pages and metadata
+data/social_packages/{episode_id}/{platform}/  # Social media packages
 ```
 
 **📚 Documentation:**
@@ -61,11 +60,12 @@ AI-EWG is an intelligent video processing pipeline that automates the transforma
 
 ### **AI-Powered Processing**
 
-✅ **Whisper Transcription** - State-of-the-art speech-to-text with GPU acceleration  
+✅ **Whisper Transcription** - State-of-the-art speech-to-text with GPU acceleration (FP16)  
 ✅ **AI Enrichment** - Automatic show name, host, episode number extraction  
 ✅ **Speaker Diarization** - Identify and label different speakers  
-✅ **Topic Segmentation** - Detect topic boundaries and key moments  
-✅ **Intelligent Clipping** - AI-powered highlight detection and ranking
+✅ **Topic Segmentation** - Semantic boundary detection with embeddings (GPU accelerated)  
+✅ **Intelligent Clipping** - AI-powered highlight detection and ranking  
+✅ **Self-Learning Corrections** - Automatic transcript correction engine
 
 ### **Organization & Naming**
 
@@ -95,6 +95,8 @@ src/core/
 ├── discovery_engine.py          # Video file discovery
 ├── clip_discovery.py            # Intelligent clip detection
 ├── clip_export.py               # Video clip rendering
+├── topic_segmentation.py        # Semantic topic boundary detection
+├── correction_engine.py         # Self-learning transcript corrections
 ├── package_generator.py         # Social media packages
 ├── policy_engine.py             # Platform-specific policies
 ├── job_queue.py                 # Background job processing
