@@ -277,6 +277,40 @@ class EpisodeRegistry:
                         error=str(e))
             raise DatabaseError(f"Failed to update episode data: {e}")
     
+    def update_episode_id(self, old_id: str, new_id: str) -> None:
+        """
+        Update episode ID (for AI-generated structured IDs)
+        
+        Args:
+            old_id: Current episode identifier
+            new_id: New episode identifier
+        """
+        try:
+            with self.connection.transaction() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE episodes 
+                    SET id = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (new_id, old_id)
+                )
+                
+                if cursor.rowcount == 0:
+                    raise DatabaseError(f"Episode not found: {old_id}")
+            
+            logger.info("Updated episode ID",
+                       old_id=old_id,
+                       new_id=new_id)
+            
+        except Exception as e:
+            logger.error("Failed to update episode ID",
+                        old_id=old_id,
+                        new_id=new_id,
+                        error=str(e))
+            raise DatabaseError(f"Failed to update episode ID: {e}")
+    
     def update_episode_source_path(self, episode_id: str, new_path: str) -> None:
         """
         Update episode source path (for moved/renamed files)

@@ -9,6 +9,7 @@ Creates:
 
 from pathlib import Path
 from typing import Dict, Any
+import torch
 
 from ..core.logging import get_logger
 from ..core.exceptions import ProcessingError
@@ -33,9 +34,19 @@ class TranscriptionStageProcessor:
         # Load Whisper model (lazy import)
         try:
             import whisper
-            logger.info(f"Loading Whisper model: {model_name}")
-            self.model = whisper.load_model(model_name)
-            logger.info("Whisper model loaded successfully")
+            import torch
+            
+            # Detect device (CUDA if available)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Loading Whisper model: {model_name} on {device}")
+            
+            self.model = whisper.load_model(model_name, device=device)
+            
+            if device == "cuda":
+                logger.info(f"Whisper model loaded successfully on GPU: {torch.cuda.get_device_name(0)}")
+            else:
+                logger.warning("CUDA not available, using CPU (this will be slower)")
+                
         except ImportError:
             raise ProcessingError("Whisper is not installed. Run: pip install openai-whisper")
     
@@ -61,13 +72,18 @@ class TranscriptionStageProcessor:
                 raise ProcessingError(f"Audio file not found: {audio_path}")
             
             # Run Whisper transcription with word timestamps
-            logger.info("Running Whisper transcription...")
+            logger.info("Running Whisper transcription on GPU..." if torch.cuda.is_available() else "Running Whisper transcription on CPU...")
+            
+            # Set FP16 for GPU acceleration
+            fp16 = torch.cuda.is_available()
+            
             result = self.model.transcribe(
                 str(audio_file),
                 language='en',  # Force English for now
                 task='transcribe',
                 verbose=False,
-                word_timestamps=True  # Enable word-level timestamps for clip generation
+                word_timestamps=True,  # Enable word-level timestamps for clip generation
+                fp16=fp16  # Use FP16 on GPU for faster processing
             )
             
             # Save plain text transcript
