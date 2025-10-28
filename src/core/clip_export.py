@@ -20,6 +20,13 @@ from .clip_specification import ClipSpecification, ClipVariantSpec
 from .logging import get_logger
 from .exceptions import ProcessingError, FFmpegError, ExportError
 from .clip_resource_manager import with_clip_resource_management
+from .intelligent_crop import (
+    IntelligentCropAnalyzer,
+    IntelligentCropConfig,
+    CropStrategy,
+    CropRegion,
+    create_crop_filter_string
+)
 
 logger = get_logger('clip_generation.clip_export')
 
@@ -150,7 +157,9 @@ class ClipExportSystem:
                  encoding_settings: Optional[VideoEncodingSettings] = None,
                  safe_padding_ms: int = 500,
                  temp_dir: Optional[str] = None,
-                 subtitle_style: Optional[SubtitleStyle] = None):
+                 subtitle_style: Optional[SubtitleStyle] = None,
+                 intelligent_crop_config: Optional[IntelligentCropConfig] = None,
+                 enable_intelligent_crop: bool = False):
         """
         Initialize clip export system
         
@@ -159,18 +168,28 @@ class ClipExportSystem:
             safe_padding_ms: Safe padding around cut points in milliseconds
             temp_dir: Temporary directory for intermediate files
             subtitle_style: Subtitle styling configuration
+            intelligent_crop_config: Intelligent crop configuration
+            enable_intelligent_crop: Enable intelligent crop features
         """
         self.encoding_settings = encoding_settings or VideoEncodingSettings()
         self.safe_padding_ms = safe_padding_ms
         self.temp_dir = Path(temp_dir) if temp_dir else Path("temp/clip_export")
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.subtitle_style = subtitle_style or SubtitleStyle()
+        self.enable_intelligent_crop = enable_intelligent_crop
+        self.intelligent_crop_config = intelligent_crop_config or IntelligentCropConfig()
+        self.intelligent_crop_analyzer = None
+        
+        if self.enable_intelligent_crop:
+            self.intelligent_crop_analyzer = IntelligentCropAnalyzer(self.intelligent_crop_config)
+            logger.info("Intelligent crop enabled", strategy=self.intelligent_crop_config.strategy.value)
         
         logger.info("ClipExportSystem initialized",
                    encoding_settings=self.encoding_settings.__dict__,
                    safe_padding_ms=safe_padding_ms,
                    temp_dir=str(self.temp_dir),
-                   subtitle_style=self.subtitle_style.__dict__)
+                   subtitle_style=self.subtitle_style.__dict__,
+                   intelligent_crop_enabled=self.enable_intelligent_crop)
     
     @with_clip_resource_management("ffmpeg")
     def render_clip(self, clip_spec: ClipSpecification, source_path: str, transcript: TranscriptionResult = None) -> List[ClipAsset]:
@@ -418,7 +437,8 @@ class ClipExportSystem:
                 # Build ffmpeg command with different parameters for retries
                 cmd = self._build_ffmpeg_command_with_fallback(
                     source_path, start_seconds, duration_seconds, 
-                    ratio_config, output_path, attempt
+                    ratio_config, output_path, attempt,
+                    start_ms=start_ms, end_ms=end_ms
                 )
                 
                 logger.debug("Rendering base clip",
@@ -507,9 +527,95 @@ class ClipExportSystem:
             raise ExportError(f"Failed to render base clip for {aspect_ratio} after {max_retries + 1} attempts",
                             aspect_ratio=aspect_ratio)
     
+    def _get_intelligent_crop_filter(self, source_path: str, start_ms: int, end_ms: int, 
+                                     ratio_config: AspectRatioConfig) -> Optional[str]:
+        """
+        Get intelligent crop filter for a clip segment
+        
+        Args:
+            source_path: Path to source video
+            start_ms: Start time in milliseconds
+            end_ms: End time in milliseconds
+            ratio_config: Aspect ratio configuration
+            
+        Returns:
+            FFmpeg filter string or None if intelligent crop disabled/failed
+        """
+        if not self.enable_intelligent_crop or not self.intelligent_crop_analyzer:
+            return None
+        
+        try:
+            logger.info("Analyzing video for intelligent crop",
+                       start_ms=start_ms,
+                       end_ms=end_ms,
+                       aspect_ratio=ratio_config.name)
+            
+            # Analyze video segment
+            crop_regions = self.intelligent_crop_analyzer.analyze_video(
+                video_path=Path(source_path),
+                start_ms=start_ms,
+                end_ms=end_ms,
+                target_width=ratio_config.width,
+                target_height=ratio_config.height
+            )
+            
+            if not crop_regions:
+                logger.warning("No crop regions generated, falling back to standard crop")
+                return None
+            
+            # Get video FPS for filter generation
+            fps = self._get_video_fps(source_path)
+            
+            # Create intelligent crop filter
+            # For now, use the first region (static crop)
+            # Full dynamic cropping would require more complex FFmpeg filters
+            region = crop_regions[0]
+            intelligent_filter = f"crop={region.width}:{region.height}:{region.x}:{region.y},scale={ratio_config.width}:{ratio_config.height}"
+            
+            logger.info("Intelligent crop filter generated",
+                       strategy=region.strategy_used,
+                       confidence=region.confidence,
+                       crop_regions=len(crop_regions))
+            
+            return intelligent_filter
+            
+        except Exception as e:
+            logger.warning(f"Intelligent crop analysis failed, using standard crop: {e}")
+            return None
+    
+    def _get_video_fps(self, video_path: str) -> float:
+        """Get video frame rate using ffprobe"""
+        try:
+            cmd = [
+                "ffprobe",
+                "-v", "quiet",
+                "-print_format", "json",
+                "-show_streams",
+                "-select_streams", "v:0",
+                video_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode != 0:
+                return 30.0  # Default fallback
+            
+            probe_data = json.loads(result.stdout)
+            if 'streams' in probe_data and len(probe_data['streams']) > 0:
+                fps_str = probe_data['streams'][0].get('r_frame_rate', '30/1')
+                num, den = map(int, fps_str.split('/'))
+                return num / den
+            
+            return 30.0
+            
+        except Exception as e:
+            logger.warning(f"Failed to get video FPS: {e}")
+            return 30.0
+    
     def _build_ffmpeg_command_with_fallback(self, source_path: str, start_seconds: float, 
                                           duration_seconds: float, ratio_config: AspectRatioConfig,
-                                          output_path: Path, attempt: int) -> List[str]:
+                                          output_path: Path, attempt: int, 
+                                          start_ms: int = None, end_ms: int = None) -> List[str]:
         """
         Build ffmpeg command with different parameters for retry attempts
         
@@ -524,13 +630,22 @@ class ClipExportSystem:
         Returns:
             List of ffmpeg command arguments
         """
+        # Try to get intelligent crop filter if enabled and timestamps provided
+        crop_filter = ratio_config.crop_filter
+        if start_ms is not None and end_ms is not None and attempt == 0:
+            # Only try intelligent crop on first attempt
+            intelligent_filter = self._get_intelligent_crop_filter(source_path, start_ms, end_ms, ratio_config)
+            if intelligent_filter:
+                crop_filter = intelligent_filter
+                logger.info("Using intelligent crop filter")
+        
         cmd = [
             "ffmpeg",
             "-y",  # Overwrite output file
             "-ss", str(start_seconds),  # Start time
             "-i", source_path,  # Input file
             "-t", str(duration_seconds),  # Duration
-            "-vf", ratio_config.crop_filter,  # Video filter for aspect ratio
+            "-vf", crop_filter,  # Video filter for aspect ratio
         ]
         
         # Use different encoding parameters for retry attempts

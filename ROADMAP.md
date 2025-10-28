@@ -383,6 +383,13 @@ From tasks.md, several test tasks marked with `[ ]*`:
 - [x] Error handling with retries and backoff
 - [x] Concurrency controls for resource protection
 - [x] Processing stage tracking in SQLite
+- [x] **Intelligent crop for clips** (feature/intelligent-crop branch)
+  - Face detection and tracking
+  - Motion-aware framing
+  - Dynamic crop adjustment with smooth transitions
+  - Multiple strategies (center, face, motion, hybrid)
+  - Configurable via pipeline.yaml
+  - Full test suite and documentation
 
 **Overall Progress**: ~60% Complete
 
@@ -534,3 +541,35 @@ Implement Ollama-based enrichment (Task 1.1) - this will have the biggest impact
 4. Test with one video end-to-end
 
 Let me know which task you want to tackle first! 🚀
+
+---
+
+## ✅ Recent Completions
+
+### Intelligent Crop System (Oct 28, 2025)
+**Branch**: `feature/intelligent-crop`  
+**Status**: Complete - Ready for Testing
+
+Implemented intelligent video cropping for clip generation:
+- **Face Detection & Tracking** - OpenCV Haar Cascades for face detection
+- **Motion-Aware Framing** - Frame differencing for motion tracking
+- **Dynamic Crop Adjustment** - Smooth transitions with exponential moving average
+- **Multiple Strategies** - Center, face tracking, motion aware, speaker tracking, hybrid
+- **Configuration** - Full YAML config in pipeline.yaml
+- **Testing** - Complete test suite in tests/test_intelligent_crop.py
+- **Documentation** - Comprehensive guide in docs/INTELLIGENT_CROP.md
+
+**Files Created:**
+- `src/core/intelligent_crop.py` (850+ lines)
+- `tests/test_intelligent_crop.py` (300+ lines)
+- `docs/INTELLIGENT_CROP.md` (500+ lines)
+
+**Files Modified:**
+- `src/core/clip_export.py` (integrated intelligent crop)
+- `config/pipeline.yaml` (added intelligent_crop section)
+
+**Next Steps:**
+- Test with sample videos
+- Enable in production (set `intelligent_crop.enabled: true`)
+- Monitor performance and accuracy
+- Consider deep learning face detection for better accuracy
