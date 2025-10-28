@@ -175,7 +175,7 @@ class VideoProcessingInterface:
                 Path("data/temp"),
                 Path("data/processing"),
                 Path("data/outputs") / episode_id,
-                Path("test_videos/newsroom/2024")  # Temporary copied files
+                Path("input_videos/_uncategorized")  # Temporary copied files
             ]
             
             files_cleaned = 0
@@ -291,12 +291,12 @@ class VideoProcessingInterface:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("📁 test_videos/newsroom", width="stretch"):
-                    folder_path = "test_videos/newsroom"
+                if st.button("📁 input_videos/_uncategorized", width="stretch"):
+                    folder_path = "input_videos/_uncategorized"
             
             with col2:
-                if st.button("📁 data/temp", width="stretch"):
-                    folder_path = "data/temp"
+                if st.button("📁 input_videos/TheNewsForum", width="stretch"):
+                    folder_path = "input_videos/TheNewsForum"
             
             with col3:
                 if st.button("📁 Browse Current Dir", width="stretch"):
@@ -360,23 +360,55 @@ class VideoProcessingInterface:
             if is_valid:
                 st.success(f"✅ {message}")
                 
-                # Show discovered video files with progress
-                with st.expander(f"📹 Video Files ({len(video_files)})", expanded=False):
-                    # Show files with progress bar for large lists
-                    if len(video_files) > 20:
-                        st.info(f"Showing first 20 of {len(video_files)} files...")
-                        progress_bar = st.progress(0)
+                # Show discovered video files with selection
+                with st.expander(f"📹 Select Video Files to Process ({len(video_files)} found)", expanded=True):
+                    st.write("**Select which files to process:**")
+                    
+                    # Add select all / deselect all buttons
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ Select All", key="select_all_files"):
+                            st.session_state['selected_files'] = video_files.copy()
+                            st.rerun()
+                    with col2:
+                        if st.button("❌ Deselect All", key="deselect_all_files"):
+                            st.session_state['selected_files'] = []
+                            st.rerun()
+                    
+                    # Initialize selected files in session state
+                    if 'selected_files' not in st.session_state:
+                        st.session_state['selected_files'] = []
+                    
+                    # Show checkboxes for each file
+                    for i, video_file in enumerate(video_files):
+                        file_path = Path(video_file)
+                        file_size = file_path.stat().st_size / (1024*1024) if file_path.exists() else 0
                         
-                        for i, video_file in enumerate(video_files[:20]):
-                            file_path = Path(video_file)
-                            st.write(f"{i+1}. {file_path.name} ({file_path.parent})")
-                            progress_bar.progress((i + 1) / 20)
+                        # Check if file is in selected list
+                        is_selected = video_file in st.session_state['selected_files']
                         
-                        st.write(f"... and {len(video_files) - 20} more files")
+                        # Create checkbox
+                        selected = st.checkbox(
+                            f"{file_path.name} ({file_size:.1f} MB)",
+                            value=is_selected,
+                            key=f"file_checkbox_{i}_{file_path.name}"
+                        )
+                        
+                        # Update selection state
+                        if selected and video_file not in st.session_state['selected_files']:
+                            st.session_state['selected_files'].append(video_file)
+                        elif not selected and video_file in st.session_state['selected_files']:
+                            st.session_state['selected_files'].remove(video_file)
+                    
+                    # Show selection summary
+                    selected_count = len(st.session_state['selected_files'])
+                    if selected_count > 0:
+                        st.success(f"✅ {selected_count} file(s) selected for processing")
                     else:
-                        for i, video_file in enumerate(video_files):
-                            file_path = Path(video_file)
-                            st.write(f"{i+1}. {file_path.name} ({file_path.parent})")
+                        st.warning("⚠️ No files selected. Please select at least one file to process.")
+                    
+                    # Update video_files to only include selected files
+                    video_files = st.session_state['selected_files'].copy()
             else:
                 st.error(f"❌ {message}")
                 folder_path = None
@@ -613,6 +645,54 @@ class VideoProcessingInterface:
             
         except Exception as e:
             logger.error(f"Error skipping stuck episode {episode_id}: {e}")
+    
+    def delete_failed_episode(self, episode_id: str) -> bool:
+        """
+        Delete a failed episode from the database and clean up all associated files
+        
+        Args:
+            episode_id: Episode ID to delete
+            
+        Returns:
+            bool: True if deletion was successful, False otherwise
+        """
+        try:
+            logger.info(f"Deleting failed episode: {episode_id}")
+            
+            # Step 1: Clean up all files
+            self.cleanup_failed_episode_files(episode_id)
+            
+            # Step 2: Delete from API/database
+            delete_response = self.api_client.delete_episode(episode_id)
+            
+            if not delete_response.success:
+                logger.warning(f"API deletion failed for {episode_id}: {delete_response.error}")
+                # Continue with local cleanup even if API delete fails
+            
+            # Step 3: Remove from session state
+            if episode_id in st.session_state.processing_progress:
+                del st.session_state.processing_progress[episode_id]
+            
+            if episode_id in st.session_state.processing_results:
+                del st.session_state.processing_results[episode_id]
+            
+            # Remove from processing episodes list
+            if 'processing_episodes' in st.session_state:
+                st.session_state.processing_episodes = [
+                    ep for ep in st.session_state.processing_episodes 
+                    if ep.episode_id != episode_id
+                ]
+            
+            # Step 4: Clear all caches
+            self.clear_failed_episode_cache(episode_id)
+            
+            logger.info(f"Successfully deleted failed episode: {episode_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting failed episode {episode_id}: {e}")
+            st.error(f"Failed to delete episode {episode_id}: {str(e)}")
+            return False
 
     def render_progress_tracking(self) -> None:
         """
@@ -755,9 +835,9 @@ class VideoProcessingInterface:
             # Approach 1: Copy files to a monitored directory temporarily
             st.info("📁 Attempting to register files with API...")
             
-            # Use the existing monitored directory (MUST match config/pipeline.yaml)
-            # Using relative path to match config: "test_videos/newsroom/2024"
-            monitored_dir = Path("test_videos/newsroom/2024")
+            # Use the uncategorized directory (MUST match config/pipeline.yaml)
+            # Using relative path to match config: "input_videos/_uncategorized"
+            monitored_dir = Path("input_videos/_uncategorized")
             monitored_dir.mkdir(parents=True, exist_ok=True)
             
             copied_files = []
@@ -1386,68 +1466,112 @@ class VideoProcessingInterface:
                     st.session_state.processing_active = False
                     return
             
-            # Step 2: Discover episodes via API (simplified - no retry for debugging)
-            st.info("🔍 Discovering episodes via API...")
-            discover_response = self.api_client.discover_episodes()
-            
+            # Step 2: Check if user has selected specific files
+            selected_video_files = options.get('video_files', [])
             episodes = []
+            discover_response = None  # Initialize to avoid UnboundLocalError
             
-            # Debug: Show API response details
-            st.write(f"**Debug - API Response:**")
-            st.write(f"- Success: {discover_response.success}")
-            st.write(f"- Data type: {type(discover_response.data)}")
-            st.write(f"- Data: {discover_response.data}")
-            
-            if discover_response.success and discover_response.data:
-                # Parse discovered episodes
-                if isinstance(discover_response.data, dict):
-                    episodes_data = discover_response.data.get('episodes', [])
-                elif isinstance(discover_response.data, list):
-                    episodes_data = discover_response.data
-                else:
-                    episodes_data = []
+            if selected_video_files:
+                # User selected specific files - skip full discovery and get existing episodes
+                st.info(f"🔍 Loading {len(selected_video_files)} selected file(s) from database...")
                 
-                st.write(f"**Debug - Episodes Data:**")
-                st.write(f"- Episodes count: {len(episodes_data)}")
-                st.write(f"- Episodes data: {episodes_data}")
+                # Get all episodes from database
+                list_response = self.api_client.list_episodes()
                 
-                for episode_data in episodes_data:
-                    episode = self.api_client.parse_episode_info(episode_data)
-                    episodes.append(episode)
-                    st.write(f"- Parsed episode: {episode.episode_id} at {episode.source_path}")
-                    logger.info(f"Discovered episode: {episode.episode_id} at {episode.source_path}")
+                if list_response.success and list_response.data:
+                    all_episodes_data = list_response.data.get('episodes', []) if isinstance(list_response.data, dict) else list_response.data
+                    
+                    # Normalize selected file paths for comparison
+                    selected_paths = {str(Path(f).resolve()) for f in selected_video_files}
+                    
+                    # Find matching episodes
+                    for episode_data in all_episodes_data:
+                        episode = self.api_client.parse_episode_info(episode_data)
+                        episode_path = str(Path(episode.source_path).resolve())
+                        
+                        if episode_path in selected_paths:
+                            episodes.append(episode)
+                            logger.info(f"Found existing episode: {episode.episode_id} at {episode.source_path}")
+                    
+                    st.success(f"✅ Found {len(episodes)} existing episode(s) in database")
+                    
+                    # If some files don't have episodes yet, run discovery for those only
+                    if len(episodes) < len(selected_video_files):
+                        missing_count = len(selected_video_files) - len(episodes)
+                        st.info(f"🔍 {missing_count} file(s) not in database, running discovery...")
+                        
+                        discover_response = self.api_client.discover_episodes()
+                        
+                        if discover_response.success and discover_response.data:
+                            # Parse newly discovered episodes
+                            new_episodes_data = discover_response.data.get('episodes', []) if isinstance(discover_response.data, dict) else discover_response.data
+                            
+                            # Add only the missing episodes
+                            for episode_data in new_episodes_data:
+                                episode = self.api_client.parse_episode_info(episode_data)
+                                episode_path = str(Path(episode.source_path).resolve())
+                                
+                                # Only add if it's one of the selected files and not already in our list
+                                if episode_path in selected_paths and not any(ep.episode_id == episode.episode_id for ep in episodes):
+                                    episodes.append(episode)
+                                    logger.info(f"Discovered new episode: {episode.episode_id} at {episode.source_path}")
+                            
+                            st.success(f"✅ Added {len(episodes) - (len(selected_video_files) - missing_count)} newly discovered episode(s)")
                 
-                st.write(f"**Debug - Total episodes parsed: {len(episodes)}**")
-                
-                # Deduplicate episodes by episode_id (same file may be found in multiple source paths)
-                seen_ids = set()
-                unique_episodes = []
-                for episode in episodes:
-                    if episode.episode_id not in seen_ids:
-                        seen_ids.add(episode.episode_id)
-                        unique_episodes.append(episode)
-                
-                if len(episodes) != len(unique_episodes):
-                    st.info(f"ℹ️ Removed {len(episodes) - len(unique_episodes)} duplicate episode(s)")
-                    episodes = unique_episodes
-                
-                # Don't filter by folder path - if API discovered it, it's valid
-                # The folder_path is just for user reference, not for filtering
-                st.write(f"**Debug - After deduplication: {len(episodes)} unique episode(s)**")
-                
+                # Show what we found
                 if episodes:
                     show_success_notification(
-                        f"Discovered {len(episodes)} episode(s) from API",
-                        f"Found episodes in: {folder_path}" if folder_path else None
+                        f"Ready to process {len(episodes)} episode(s)",
+                        f"Loaded from database without full discovery"
                     )
                     
-                    # Show discovered episodes
-                    with st.expander("📹 Discovered Episodes", expanded=True):
+                    # Show selected episodes
+                    with st.expander("📹 Selected Episodes", expanded=True):
                         for episode in episodes:
                             st.write(f"- **{episode.title or episode.episode_id}** ({episode.source_path})")
                 else:
-                    # No episodes found via API, try fallback with local files
-                    st.info("🔍 No episodes found via API discovery, trying local file discovery...")
+                    st.warning("⚠️ No matching episodes found in database")
+                    st.info("💡 Files may need to be discovered first. Running full discovery...")
+                    
+                    # Fall back to full discovery
+                    discover_response = self.api_client.discover_episodes()
+                    
+                    if discover_response.success and discover_response.data:
+                        episodes_data = discover_response.data.get('episodes', []) if isinstance(discover_response.data, dict) else discover_response.data
+                        
+                        # Filter to selected files
+                        for episode_data in episodes_data:
+                            episode = self.api_client.parse_episode_info(episode_data)
+                            episode_path = str(Path(episode.source_path).resolve())
+                            
+                            if episode_path in selected_paths:
+                                episodes.append(episode)
+                        
+                        if episodes:
+                            st.success(f"✅ Discovered {len(episodes)} episode(s)")
+            else:
+                # No files selected - run full discovery (old behavior)
+                st.info("🔍 No files selected, running full discovery...")
+                discover_response = self.api_client.discover_episodes()
+                
+                if discover_response.success and discover_response.data:
+                    episodes_data = discover_response.data.get('episodes', []) if isinstance(discover_response.data, dict) else discover_response.data
+                    
+                    for episode_data in episodes_data:
+                        episode = self.api_client.parse_episode_info(episode_data)
+                        episodes.append(episode)
+                    
+                    if episodes:
+                        show_success_notification(
+                            f"Discovered {len(episodes)} episode(s) from API",
+                            f"Found episodes in: {folder_path}" if folder_path else None
+                        )
+                        
+                        with st.expander("📹 Discovered Episodes", expanded=True):
+                            for episode in episodes:
+                                st.write(f"- **{episode.title or episode.episode_id}** ({episode.source_path})")
+                    else:
+                        st.info("🔍 No episodes found via API discovery, trying local file discovery...")
             
             # Fallback: Handle direct folder processing when API discovery finds nothing
             if not episodes and options.get('video_files'):
@@ -1479,13 +1603,13 @@ class VideoProcessingInterface:
                     
                     st.info("💡 **Manual Processing Options:**")
                     st.write("1. **Restart API Server**: Stop and restart the API server to pick up configuration changes")
-                    st.write("2. **Copy Files**: Copy files to a monitored directory (e.g., test_videos/newsroom/2024)")
+                    st.write("2. **Copy Files**: Copy files to a monitored directory (e.g., input_videos/_uncategorized)")
                     st.write("3. **Wait and Retry**: The API may need time to detect new files")
                     
                     # Provide copy command for Windows
                     if video_files and len(video_files) == 1:
                         source_file = Path(video_files[0])
-                        target_dir = "test_videos/newsroom/2024"
+                        target_dir = "input_videos\\_uncategorized"
                         copy_command = f'copy "{source_file}" "{target_dir}"'
                         st.code(f"Windows Command: {copy_command}")
                     
@@ -1495,7 +1619,7 @@ class VideoProcessingInterface:
                         st.rerun()
             
             # Handle API discovery failure
-            elif not discover_response.success:
+            elif discover_response and not discover_response.success:
                 error_info = ErrorHandler.get_api_error_info(
                     discover_response.error or "Episode discovery failed"
                 )
@@ -1935,16 +2059,16 @@ class VideoProcessingInterface:
             
             st.dataframe(results_data, width="stretch")
             
-            # Show retry options for failed episodes
+            # Show retry/delete options for failed episodes
             failed_episode_list = [ep for ep in episodes if progress_data.get(ep.episode_id, {}).get('error')]
             
             if failed_episode_list and not st.session_state.processing_active:
-                st.subheader("🔄 Retry Failed Episodes")
+                st.subheader("🔄 Manage Failed Episodes")
                 
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    if st.button("🔄 Retry All Failed Episodes", width="stretch"):
+                    if st.button("🔄 Retry All Failed", width="stretch", type="primary"):
                         # Clear caches for all failed episodes first
                         st.info("🧹 Clearing caches for failed episodes...")
                         for episode in failed_episode_list:
@@ -1962,8 +2086,8 @@ class VideoProcessingInterface:
                         
                         # Get current processing options (simplified)
                         retry_options = {
-                            'force_reprocess': True,  # Force reprocess on retry
-                            'clear_cache_on_start': True,  # Clear cache on retry
+                            'force_reprocess': True,
+                            'clear_cache_on_start': True,
                             'target_stage': 'rendered',
                             'auto_clips': True,
                             'auto_social': True,
@@ -1975,6 +2099,24 @@ class VideoProcessingInterface:
                         st.rerun()
                 
                 with col2:
+                    if st.button("🗑️ Delete All Failed", width="stretch", type="secondary"):
+                        # Confirm deletion
+                        if 'confirm_delete_all' not in st.session_state:
+                            st.session_state['confirm_delete_all'] = True
+                            st.warning(f"⚠️ Are you sure you want to delete {len(failed_episode_list)} failed episode(s)? Click again to confirm.")
+                            st.rerun()
+                        else:
+                            # Perform deletion
+                            deleted_count = 0
+                            for episode in failed_episode_list:
+                                if self.delete_failed_episode(episode.episode_id):
+                                    deleted_count += 1
+                            
+                            st.success(f"✅ Deleted {deleted_count} failed episode(s)")
+                            del st.session_state['confirm_delete_all']
+                            st.rerun()
+                
+                with col3:
                     if st.button("📋 Show Error Details", width="stretch"):
                         # Show detailed error information
                         for episode in failed_episode_list:
@@ -1985,6 +2127,26 @@ class VideoProcessingInterface:
                                 st.error(f"**Error:** {error}")
                                 st.write(f"**Stage:** {progress_info.get('current_stage', 'unknown')}")
                                 st.write(f"**Message:** {progress_info.get('message', 'No message')}")
+                                
+                                # Individual episode actions
+                                col_a, col_b = st.columns(2)
+                                with col_a:
+                                    if st.button(f"🔄 Retry", key=f"retry_{episode.episode_id}", width="stretch"):
+                                        self.clear_failed_episode_cache(episode.episode_id)
+                                        st.session_state.processing_progress[episode.episode_id] = {
+                                            'current_stage': 'discovered',
+                                            'progress_percentage': 10,
+                                            'message': 'Queued for retry',
+                                            'completed': False,
+                                            'error': None
+                                        }
+                                        st.rerun()
+                                
+                                with col_b:
+                                    if st.button(f"🗑️ Delete", key=f"delete_{episode.episode_id}", width="stretch"):
+                                        if self.delete_failed_episode(episode.episode_id):
+                                            st.success(f"✅ Deleted {episode.episode_id}")
+                                            st.rerun()
                                 
                                 # Provide specific remediation based on error type
                                 if "Connection" in error or "timeout" in error.lower():

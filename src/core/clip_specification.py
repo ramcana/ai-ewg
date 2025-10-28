@@ -117,14 +117,14 @@ class ClipSpecificationEngine:
     
     def __init__(self, 
                  clip_registry: ClipRegistry,
-                 output_base_dir: str = "outputs",
+                 output_base_dir: str = "data/clips",
                  variants: Optional[List[str]] = None):
         """
         Initialize clip specification engine
         
         Args:
             clip_registry: Registry for database operations
-            output_base_dir: Base directory for output files
+            output_base_dir: Base directory for output files (default: data/clips for consistency)
             variants: List of variants to generate (defaults to ['clean', 'subtitled'])
         """
         self.clip_registry = clip_registry
@@ -560,7 +560,7 @@ class ClipSpecificationEngine:
 
 # Utility functions
 def create_clip_specification_engine(clip_registry: ClipRegistry,
-                                   output_base_dir: str = "outputs",
+                                   output_base_dir: str = "data/clips",
                                    variants: Optional[List[str]] = None) -> ClipSpecificationEngine:
     """Factory function to create clip specification engine"""
     return ClipSpecificationEngine(clip_registry, output_base_dir, variants)

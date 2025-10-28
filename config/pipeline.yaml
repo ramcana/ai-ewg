@@ -2,15 +2,47 @@
 # This file defines the default configuration for the pipeline
 
 # Video source directories
+# Organized by show for better management
 sources:
-  - path: "test_videos/newsroom/2024"
+  # Main input folder - organized by show
+  - path: "input_videos/TheNewsForum/ForumDailyNews"
     include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
     exclude: []
     enabled: true
+  - path: "input_videos/TheNewsForum/BoomAndBust"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+  - path: "input_videos/TheNewsForum/CommunityProfile"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+  - path: "input_videos/TheNewsForum/EconomicPulse"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+  - path: "input_videos/TheNewsForum/FreedomForum"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+  
+  # Uncategorized videos (to be sorted later)
+  - path: "input_videos/_uncategorized"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm", "*.flv"]
+    exclude: []
+    enabled: true
+  
+  # Temporary upload folder (from Streamlit uploads)
   - path: "data/temp/uploaded"
     include: ["*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm", "*.flv"]
     exclude: []
     enabled: true
+  
+  # Legacy folder (kept for backward compatibility - can be disabled later)
+  - path: "test_videos/newsroom/2024"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: false  # Disabled - use organized structure above
 
 # Staging area for temporary files
 staging:
