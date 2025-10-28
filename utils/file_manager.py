@@ -189,9 +189,8 @@ class FileManager:
             # Create episode-specific directories
             episode_clips_dir = self.clips_dir / episode_id
             episode_social_dir = self.social_dir / episode_id
-            episode_outputs_dir = self.outputs_dir / episode_id / "clips"
             
-            directories = [episode_clips_dir, episode_social_dir, episode_outputs_dir]
+            directories = [episode_clips_dir, episode_social_dir]
             
             for directory in directories:
                 directory.mkdir(parents=True, exist_ok=True)
@@ -369,7 +368,7 @@ class FileManager:
         Returns:
             DirectoryInfo: Clip files information
         """
-        clips_dir = self.outputs_dir / episode_id / "clips"
+        clips_dir = self.clips_dir / episode_id
         return self.scan_directory(clips_dir, recursive=True)
     
     def get_episode_file_structure(self, episode_id: str) -> EpisodeFileStructure:
