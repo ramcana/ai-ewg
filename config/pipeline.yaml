@@ -134,3 +134,32 @@ resources:
 
 # API rate limiting
 api_rate_limit_delay: 0.5
+
+# Intelligent crop configuration for clip generation
+intelligent_crop:
+  enabled: false  # Set to true to enable intelligent crop features
+  strategy: "hybrid"  # Options: center, face_tracking, motion_aware, speaker_tracking, hybrid
+  
+  # Face detection settings
+  face_detection:
+    enabled: true
+    interval: 5  # Analyze every N frames
+    min_confidence: 0.5
+    cascade_path: null  # Use default OpenCV cascade if null
+  
+  # Motion detection settings
+  motion_detection:
+    enabled: true
+    interval: 3  # Analyze every N frames
+    threshold: 25.0  # Motion sensitivity (lower = more sensitive)
+    min_area: 500  # Minimum motion area in pixels
+  
+  # Crop parameters
+  crop_params:
+    smooth_transitions: true
+    transition_smoothness: 0.3  # 0=instant, 1=very smooth
+    padding_percent: 0.15  # Extra space around detected region
+    max_analysis_fps: 10  # Downsample video for analysis performance
+  
+  # Performance
+  use_gpu: true  # Use GPU acceleration if available
