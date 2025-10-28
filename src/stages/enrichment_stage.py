@@ -31,6 +31,7 @@ from ..core.ollama_client import OllamaClient
 from ..utils.transcript_cleaner import clean_transcript
 from ..core.intelligence_chain_v2 import IntelligenceChainOrchestratorV2
 from ..core.config import PipelineConfig
+from ..core.correction_engine import create_correction_engine
 
 # Import diarization utility
 import sys
@@ -94,6 +95,14 @@ class EnrichmentStageProcessor:
         # Intelligence Chain V2 settings (Phase 2)
         self.intelligence_chain_enabled = intelligence_chain_enabled
         self.intelligence_chain: Optional[IntelligenceChainOrchestratorV2] = None
+        
+        # Initialize correction engine
+        try:
+            self.correction_engine = create_correction_engine()
+            logger.info("Correction engine initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize correction engine: {e}")
+            self.correction_engine = None
         
         # Initialize intelligence chain if enabled
         if intelligence_chain_enabled:
@@ -170,6 +179,35 @@ class EnrichmentStageProcessor:
                 )
             else:
                 transcript_text_cleaned = transcript_text
+            
+            # Apply learned corrections to transcript
+            if self.correction_engine and transcript_text_cleaned:
+                logger.info("Applying learned corrections", episode_id=episode.episode_id)
+                
+                # Get show name from episode metadata if available
+                show_name = None
+                if hasattr(episode, 'enrichment') and episode.enrichment:
+                    show_name = getattr(episode.enrichment, 'show_name', None)
+                
+                # Apply corrections to full transcript data
+                transcript_data = self.correction_engine.apply_corrections_to_transcript(
+                    transcript_data,
+                    show_name=show_name,
+                    context=None  # Can add topic/guest context later
+                )
+                
+                # Update cleaned text with corrections
+                transcript_text_cleaned = transcript_data.get('text', transcript_text_cleaned)
+                
+                # Log corrections applied
+                corrections_applied = transcript_data.get('metadata', {}).get('corrections_applied', [])
+                if corrections_applied:
+                    logger.info(
+                        "Applied corrections to transcript",
+                        episode_id=episode.episode_id,
+                        corrections_count=len(corrections_applied),
+                        corrections=corrections_applied
+                    )
             
             if not transcript_text_cleaned:
                 logger.warning(
@@ -324,22 +362,34 @@ class EnrichmentStageProcessor:
         
         try:
             logger.info(
-                "Starting speaker diarization",
+                "Starting speaker diarization (timeout: 15 minutes)",
                 episode_id=episode.episode_id,
                 audio_path=audio_path,
                 num_speakers=self.num_speakers,
                 device=self.diarization_device
             )
             
-            # Run diarization
-            result = diarize_audio(
-                audio_path=audio_path,
-                output_path=None,  # Don't save to file, return dict
-                hf_token=self.hf_token,
-                num_speakers=self.num_speakers if self.num_speakers > 0 else None,
-                device=self.diarization_device,
-                merge_gap=2.0
-            )
+            # Run diarization with timeout (15 minutes max)
+            import asyncio
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        diarize_audio,
+                        audio_path=audio_path,
+                        output_path=None,
+                        hf_token=self.hf_token,
+                        num_speakers=self.num_speakers if self.num_speakers > 0 else None,
+                        device=self.diarization_device,
+                        merge_gap=2.0
+                    ),
+                    timeout=900  # 15 minutes
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Diarization timed out after 15 minutes",
+                    episode_id=episode.episode_id
+                )
+                return None
             
             # Validate results
             validation = validate_diarization(result['segments'])

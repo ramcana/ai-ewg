@@ -16,6 +16,7 @@ from components.processing import render_video_processing_page
 from components.outputs import render_view_outputs_page
 from components.clips import render_clip_management_page
 from components.social_generator import render_social_package_generation_interface
+from components.corrections import render_correction_management_page
 
 # Page configuration
 st.set_page_config(
@@ -263,6 +264,7 @@ def render_sidebar():
                 ("Process Videos", "🎬", "Upload and process video content"), 
                 ("View Outputs", "📁", "Browse generated files and content"),
                 ("Clip Management", "✂️", "Configure and manage video clips"),
+                ("Corrections", "📝", "Manage transcript corrections"),
                 ("Social Media Packages", "📱", "Create social media content"),
                 ("System Status", "🔧", "Monitor system health and performance")
             ]
@@ -1162,6 +1164,8 @@ def main():
             render_view_outputs_page()
         elif current_page == 'Clip Management':
             render_clip_management_page()
+        elif current_page == 'Corrections':
+            render_correction_management_page()
         elif current_page == 'Social Media Packages':
             render_social_package_generation_interface()
         elif current_page == 'System Status':
