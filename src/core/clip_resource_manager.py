@@ -196,16 +196,20 @@ class ClipResourceManager:
             # Check memory availability
             availability = self.check_resource_availability()
             if not availability['memory']:
-                # Try cleanup first
-                cleanup_result = self.memory_manager.cleanup()
-                logger.info("Memory cleanup performed before embedding generation",
-                          freed_mb=cleanup_result.get('memory_freed_mb', 0))
+                # Skip aggressive cleanup before embedding - model needs to stay in memory
+                # cleanup_result = self.memory_manager.cleanup()
+                # logger.info("Memory cleanup performed before embedding generation",
+                #           freed_mb=cleanup_result.get('memory_freed_mb', 0))
+                
+                # Log warning but proceed - embedding model is already loaded
+                logger.warning("Low memory detected but proceeding with embedding generation",
+                             reason="Cleanup would clear the loaded embedding model")
                 
                 # Check again after cleanup
-                availability = self.check_resource_availability()
-                if not availability['memory']:
-                    raise EmbeddingError("Insufficient memory for embedding generation",
-                                       model_name="resource_check")
+                # availability = self.check_resource_availability()
+                # if not availability['memory']:
+                #     raise EmbeddingError("Insufficient memory for embedding generation",
+                #                        model_name="resource_check")
             
             logger.debug("Embedding resource context acquired")
             yield

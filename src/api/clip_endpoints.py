@@ -285,17 +285,10 @@ def register_clip_endpoints(app: FastAPI):
             variant_specs = []
             for variant in request.variants:
                 for aspect_ratio in request.aspect_ratios:
-                    # Generate output path using naming service
-                    from ..core.naming_service import get_naming_service
-                    naming_service = get_naming_service()
+                    # Generate output path directly to data/clips (not using naming service folder structure)
+                    from pathlib import Path
                     
-                    episode_folder = naming_service.get_episode_folder_path(
-                        episode_id=clip.episode_id,
-                        show_name=episode.enrichment.show_name if episode.enrichment else None,
-                        date=episode.created_at
-                    )
-                    
-                    output_path = str(episode_folder / "clips" / clip.id / f"{aspect_ratio}_{variant}.mp4")
+                    output_path = str(Path("data/clips") / clip.episode_id / clip.id / f"{aspect_ratio}_{variant}.mp4")
                     
                     variant_spec = ClipVariantSpec(
                         variant=variant,
@@ -480,17 +473,10 @@ def register_clip_endpoints(app: FastAPI):
                     variant_specs = []
                     for variant in request.variants:
                         for aspect_ratio in request.aspect_ratios:
-                            # Generate output path using naming service
-                            from ..core.naming_service import get_naming_service
-                            naming_service = get_naming_service()
+                            # Generate output path directly to data/clips (not using naming service folder structure)
+                            from pathlib import Path
                             
-                            episode_folder = naming_service.get_episode_folder_path(
-                                episode_id=clip.episode_id,
-                                show_name=episode.enrichment.show_name if episode.enrichment else None,
-                                date=episode.created_at
-                            )
-                            
-                            output_path = str(episode_folder / "clips" / clip.id / f"{aspect_ratio}_{variant}.mp4")
+                            output_path = str(Path("data/clips") / clip.episode_id / clip.id / f"{aspect_ratio}_{variant}.mp4")
                             
                             variant_spec = ClipVariantSpec(
                                 variant=variant,
