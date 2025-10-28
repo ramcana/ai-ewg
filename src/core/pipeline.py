@@ -449,6 +449,28 @@ class PipelineOrchestrator:
         if not episode:
             raise ProcessingError(f"Episode not found: {episode_id}")
         
+        # Check if transcription already exists and is valid
+        if episode.transcription and episode.transcription.text:
+            self.logger.info("Transcription already exists, skipping Whisper",
+                           episode_id=episode_id,
+                           text_length=len(episode.transcription.text),
+                           has_words=len(episode.transcription.words) > 0 if episode.transcription.words else False)
+            
+            # Store existing transcript data for next stage
+            self._stage_data[episode_id] = {
+                'transcript': {
+                    'success': True,
+                    'text': episode.transcription.text,
+                    'segments': episode.transcription.segments,
+                    'words': episode.transcription.words,
+                    'language': episode.transcription.language,
+                    'vtt_path': f"data/transcripts/{episode_id}/transcript.vtt"
+                }
+            }
+            return
+        
+        self.logger.info("No existing transcription found, running Whisper", episode_id=episode_id)
+        
         # Find audio path
         audio_path = f"data/audio/{episode_id}.wav"
         
@@ -491,6 +513,35 @@ class PipelineOrchestrator:
         episode = self.registry.get_episode(episode_id)
         if not episode:
             raise ProcessingError(f"Episode not found: {episode_id}")
+        
+        # Check if enrichment already exists and is valid
+        if episode.enrichment and episode.enrichment.show_name:
+            self.logger.info("Enrichment already exists, skipping AI analysis",
+                           episode_id=episode_id,
+                           show_name=episode.enrichment.show_name,
+                           host_name=episode.enrichment.host_name,
+                           has_summary=bool(episode.enrichment.executive_summary))
+            
+            # Store existing enrichment data for next stage
+            if episode_id not in self._stage_data:
+                self._stage_data[episode_id] = {}
+            self._stage_data[episode_id]['enrichment'] = {
+                'success': True,
+                'enrichment_data': {
+                    'ai_analysis': {
+                        'show_name': episode.enrichment.show_name,
+                        'host_name': episode.enrichment.host_name,
+                        'executive_summary': episode.enrichment.executive_summary,
+                        'key_takeaways': episode.enrichment.key_takeaways,
+                        'deep_analysis': episode.enrichment.deep_analysis,
+                        'topics': episode.enrichment.topics,
+                        'segment_titles': episode.enrichment.segment_titles
+                    }
+                }
+            }
+            return
+        
+        self.logger.info("No existing enrichment found, running AI analysis", episode_id=episode_id)
         
         audio_path = f"data/audio/{episode_id}.wav"
         transcript_data = self._stage_data.get(episode_id, {}).get('transcript', {})
@@ -571,19 +622,22 @@ class PipelineOrchestrator:
                 
                 # Only update if ID actually changed
                 if new_episode_id != old_episode_id:
-                    self.logger.info("Regenerating episode ID with AI metadata",
+                    self.logger.info("Episode ID would change with AI metadata (skipping rename due to foreign key constraints)",
                                    old_id=old_episode_id,
                                    new_id=new_episode_id,
                                    show_name=enrichment_result.show_name,
                                    episode_number=episode_number)
                     
-                    episode.episode_id = new_episode_id
-                    episode_id = new_episode_id
-                    
-                    # TODO: In future, rename files and update paths here
-                    # For now, just update the database
+                    # DISABLED: Renaming episode IDs breaks foreign key constraints in clips/social_jobs tables
+                    # The episode ID is used as a foreign key in multiple tables, so we can't rename it
+                    # Instead, we store the show name and episode number in the episode metadata
+                    # 
+                    # TODO: In future, implement proper ID migration that updates all foreign keys
+                    # self.registry.update_episode_id(old_episode_id, new_episode_id)
+                    # episode.episode_id = new_episode_id
+                    # episode_id = new_episode_id
             
-            # Save to database
+            # Save enrichment data to database
             self.registry.update_episode_data(episode)
             
             self.logger.info("Enrichment stage completed",
