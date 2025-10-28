@@ -227,6 +227,66 @@ def render_clip_parameter_controls(episode_id: str, api_client):
         
         variants = [variant_options[variant] for variant in selected_variants]
     
+    # Intelligent Crop Settings (New Feature)
+    st.markdown("---")
+    with st.expander("🎯 Intelligent Crop Settings (Beta)", expanded=False):
+        st.markdown("""
+        **Intelligent crop** uses AI to automatically detect faces and motion, 
+        creating better-framed clips for vertical formats.
+        """)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            enable_intelligent_crop = st.checkbox(
+                "Enable Intelligent Crop",
+                value=False,
+                help="Use AI-powered face detection and motion tracking for better framing"
+            )
+            
+            if enable_intelligent_crop:
+                crop_strategy = st.selectbox(
+                    "Crop Strategy",
+                    options=["hybrid", "face_tracking", "motion_aware", "center"],
+                    index=0,
+                    help="hybrid: Combines face + motion (recommended), face_tracking: Follow faces, motion_aware: Follow motion"
+                )
+        
+        with col2:
+            if enable_intelligent_crop:
+                enable_face_detection = st.checkbox(
+                    "Face Detection",
+                    value=True,
+                    help="Detect and track faces in the video"
+                )
+                
+                enable_motion_detection = st.checkbox(
+                    "Motion Detection",
+                    value=True,
+                    help="Detect and track motion in the video"
+                )
+                
+                smooth_transitions = st.checkbox(
+                    "Smooth Transitions",
+                    value=True,
+                    help="Apply smooth transitions between crop regions"
+                )
+        
+        if enable_intelligent_crop:
+            st.info("💡 **Tip:** Intelligent crop works best with vertical formats (9:16) for social media content.")
+            st.warning("⚠️ **Note:** This feature is in beta. Processing may take longer due to video analysis.")
+    
+    # Add intelligent crop params to session state
+    intelligent_crop_params = None
+    if enable_intelligent_crop:
+        intelligent_crop_params = {
+            "enabled": True,
+            "strategy": crop_strategy,
+            "enable_face_detection": enable_face_detection,
+            "enable_motion_detection": enable_motion_detection,
+            "smooth_transitions": smooth_transitions
+        }
+    
     # Store parameters in session state
     clip_params = {
         "min_duration_ms": min_duration_ms,
@@ -234,7 +294,8 @@ def render_clip_parameter_controls(episode_id: str, api_client):
         "score_threshold": score_threshold,
         "max_clips": max_clips,
         "aspect_ratios": aspect_ratios,
-        "variants": variants
+        "variants": variants,
+        "intelligent_crop": intelligent_crop_params
     }
     
     st.session_state[f'clip_params_{episode_id}'] = clip_params
