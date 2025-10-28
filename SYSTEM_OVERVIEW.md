@@ -50,26 +50,28 @@ input_videos/
 └── data/temp/uploaded/       # Temporary uploads from Streamlit
 ```
 
-**Output Structure** (Consistent with Input):
+**Output Structure** (Organized by Purpose):
 ```
 data/
-├── clips/{episode_id}/clips/{clip_id}/    # Generated clips
-├── transcripts/{episode_id}/              # Transcription files
-├── enrichment/{episode_id}/               # AI analysis
-├── html/{episode_id}/                     # Web pages
-└── social_packages/{episode_id}/          # Platform packages
+├── clips/{episode_id}/{clip_id}/          # Video clips (all aspect ratios)
+├── transcripts/{episode_id}/              # Transcription files (VTT, SRT, JSON)
+├── outputs/{show}/{year}/{episode_id}/    # HTML pages and metadata
+└── social_packages/{episode_id}/{platform}/ # Platform-specific packages
 ```
 
 **Setup**: Run `.\setup_input_structure.ps1` to create input folders
 
 ### **Stage 2: Transcription (Whisper)**
 ```
-Audio → Whisper AI → Transcript + Word Timestamps → VTT/SRT
+Audio → Whisper AI (GPU) → Transcript + Word Timestamps → VTT/SRT
 ```
-- Uses OpenAI Whisper (large-v3 model)
+- Uses OpenAI Whisper (large-v3 model) with **GPU acceleration (FP16)**
+- Auto-detects CUDA availability for faster processing
 - Word-level timestamps for precise clip generation
-- Diarization support (speaker identification)
+- Diarization support (speaker identification with 15-min timeout)
+- **Self-learning correction engine** applies learned fixes
 - Outputs: JSON transcript, VTT, SRT subtitles
+- **Smart caching**: Skips re-processing if transcription exists
 
 ### **Stage 3: AI Enrichment (Ollama)**
 ```
@@ -106,6 +108,41 @@ Transcript → Intelligence Chain → Metadata Extraction → Database
 **Models Used**:
 - LLM: `llama3.2:latest` (via Ollama)
 - NLP: `en_core_web_lg` (spaCy)
+
+---
+
+## Clip Generation
+
+### **Stage 4: Intelligent Clip Discovery**
+```
+Transcript → Topic Segmentation (GPU) → Highlight Scoring → Clip Selection
+```
+
+**Topic Segmentation** (`src/core/topic_segmentation.py`):
+- **GPU-accelerated embedding generation** using `sentence-transformers`
+- Semantic boundary detection with PELT algorithm
+- Generates 6-20 coherent topic segments per episode
+- **Memory-optimized**: Prevents model garbage collection during processing
+
+**Highlight Scoring** (`src/core/highlight_scoring.py`):
+- Scores segments based on content quality, speaker engagement, keywords
+- Identifies high-value moments for clip extraction
+- Configurable scoring weights and thresholds
+
+**Clip Selection** (`src/core/clip_selection.py`):
+- Selects optimal clips based on duration targets (20-120s)
+- Multiple aspect ratios: 16:9, 9:16, 1:1
+- Clean and subtitled variants
+- Stored in `data/clips/{episode_id}/{clip_id}/`
+
+### **Stage 5: Clip Rendering**
+```
+Clip Specs → FFmpeg (GPU) → Video Files + Subtitles
+```
+- FFmpeg-based video extraction with GPU acceleration
+- Automatic subtitle generation from VTT transcripts
+- Multiple variants per clip (clean, subtitled)
+- Aspect ratio cropping and optimization
 
 ---
 
