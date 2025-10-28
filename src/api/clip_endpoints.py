@@ -286,7 +286,7 @@ def register_clip_endpoints(app: FastAPI):
             for variant in request.variants:
                 for aspect_ratio in request.aspect_ratios:
                     # Generate output path using naming service
-                    from ...core.naming_service import get_naming_service
+                    from ..core.naming_service import get_naming_service
                     naming_service = get_naming_service()
                     
                     episode_folder = naming_service.get_episode_folder_path(
@@ -481,7 +481,7 @@ def register_clip_endpoints(app: FastAPI):
                     for variant in request.variants:
                         for aspect_ratio in request.aspect_ratios:
                             # Generate output path using naming service
-                            from ...core.naming_service import get_naming_service
+                            from ..core.naming_service import get_naming_service
                             naming_service = get_naming_service()
                             
                             episode_folder = naming_service.get_episode_folder_path(
@@ -539,10 +539,18 @@ def register_clip_endpoints(app: FastAPI):
                     successful += 1
                     
                 except Exception as e:
+                    import traceback
+                    error_details = traceback.format_exc()
                     logger.error(f"Error rendering clip in batch", 
                                 clip_id=clip.id, 
                                 error=str(e),
+                                traceback=error_details,
                                 exc_info=True)
+                    print(f"\n{'='*80}")
+                    print(f"CLIP RENDERING ERROR - Clip ID: {clip.id}")
+                    print(f"{'='*80}")
+                    print(error_details)
+                    print(f"{'='*80}\n")
                     
                     # Update clip status to failed
                     try:
