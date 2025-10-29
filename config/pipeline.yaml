@@ -63,6 +63,24 @@ models:
   diarization_device: "cuda"
   num_speakers: 0  # 0 = auto-detect, or set to actual number if known
 
+# Multilingual transcription configuration
+transcription:
+  language: "auto"  # Auto-detect language, or specify: en, es, fr, de, it, pt, etc.
+  translate_to_english: false  # Set true to translate non-English audio to English
+  task: "transcribe"  # Options: "transcribe" or "translate"
+  supported_languages:
+    - en  # English
+    - es  # Spanish
+    - fr  # French
+    - de  # German
+    - it  # Italian
+    - pt  # Portuguese
+    - ru  # Russian
+    - ja  # Japanese
+    - ko  # Korean
+    - zh  # Chinese
+  fallback_language: "en"  # Fallback if detection fails
+
 # Ollama configuration for AI enrichment
 ollama:
   enabled: true

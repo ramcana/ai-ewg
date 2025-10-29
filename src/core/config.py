@@ -103,6 +103,18 @@ class ResourceConfig:
 
 
 @dataclass
+class TranscriptionConfig:
+    """Configuration for multilingual transcription"""
+    language: str = "auto"  # Auto-detect or specific language code
+    translate_to_english: bool = False
+    task: str = "transcribe"  # "transcribe" or "translate"
+    supported_languages: List[str] = field(default_factory=lambda: [
+        "en", "es", "fr", "de", "it", "pt", "ru", "ja", "ko", "zh"
+    ])
+    fallback_language: str = "en"
+
+
+@dataclass
 class ClipGenerationConfig:
     """Configuration for clip generation system"""
     enabled: bool = False
@@ -146,6 +158,7 @@ class PipelineConfig:
     staging: StagingConfig = field(default_factory=StagingConfig)
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
     models: ModelConfig = field(default_factory=ModelConfig)
+    transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
     thresholds: ThresholdConfig = field(default_factory=ThresholdConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -158,6 +171,11 @@ class PipelineConfig:
     hf_token: Optional[str] = None
     ollama_url: str = "http://localhost:11434"
     api_rate_limit_delay: float = 0.5
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert PipelineConfig to dictionary"""
+        from dataclasses import asdict
+        return asdict(self)
 
 
 class ConfigurationManager:

@@ -474,8 +474,11 @@ class PipelineOrchestrator:
         # Find audio path
         audio_path = f"data/audio/{episode_id}.wav"
         
-        # Run transcription processor
-        processor = TranscriptionStageProcessor(model_name=self.config.models.whisper)
+        # Run transcription processor with multilingual configuration
+        processor = TranscriptionStageProcessor(
+            model_name=self.config.models.whisper,
+            config=self.config.to_dict()  # Pass full config for multilingual settings
+        )
         result = await processor.process(episode, audio_path)
         
         # Store transcript data for next stage
@@ -492,7 +495,12 @@ class PipelineOrchestrator:
                 segments=result['segments'],
                 words=result.get('words', []),
                 language=result.get('language', 'en'),
-                model_used=self.config.models.whisper
+                model_used=self.config.models.whisper,
+                # Multilingual support fields
+                detected_language=result.get('detected_language'),
+                original_language=result.get('original_language'),
+                task_performed=result.get('task_performed', 'transcribe'),
+                translated_to_english=result.get('translated_to_english', False)
             )
             
             # Save updated episode to database
