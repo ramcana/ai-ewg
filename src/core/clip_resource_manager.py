@@ -30,7 +30,7 @@ T = TypeVar('T')
 @dataclass
 class ClipResourceLimits:
     """Resource limits specific to clip generation"""
-    max_embedding_memory_mb: float = 2000.0  # 2GB for embedding models
+    max_embedding_memory_mb: float = 16000.0  # 16GB for embedding models (high-end system)
     max_ffmpeg_concurrent: int = 2  # Limit concurrent FFmpeg processes
     max_llm_concurrent: int = 1  # Limit concurrent LLM requests
     embedding_batch_size: int = 32  # Batch size for embedding generation
@@ -99,11 +99,17 @@ class ClipResourceManager:
             
             # Check clip-specific limits
             current_usage = self.memory_manager.check_memory_usage()
-            if current_usage.get('rss_mb', 0) > self.clip_limits.max_embedding_memory_mb:
+            current_rss_mb = current_usage.get('rss_mb', 0)
+            if current_rss_mb > self.clip_limits.max_embedding_memory_mb:
                 availability['memory'] = False
-                logger.debug("Embedding memory limit exceeded",
-                           current_mb=current_usage.get('rss_mb', 0),
+                logger.warning("Embedding memory limit exceeded",
+                           current_mb=current_rss_mb,
                            limit_mb=self.clip_limits.max_embedding_memory_mb)
+            else:
+                logger.debug("Memory check passed",
+                           current_mb=current_rss_mb,
+                           limit_mb=self.clip_limits.max_embedding_memory_mb,
+                           usage_percent=round((current_rss_mb / self.clip_limits.max_embedding_memory_mb) * 100, 1))
             
             # Check semaphore availability (non-blocking)
             availability['ffmpeg_slots'] = self._ffmpeg_semaphore._value > 0
