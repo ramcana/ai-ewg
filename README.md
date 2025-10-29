@@ -1,8 +1,8 @@
 # AI-EWG: AI-Enhanced Web Generation Pipeline
 
-**Automated video processing pipeline that transforms long-form video content into AI-enriched transcripts, interactive web pages, social media clips, and multi-platform packages.**
+**Automated video processing pipeline that transforms long-form video content into AI-enriched transcripts, interactive web pages, social media clips, and multi-platform packages with comprehensive multilingual support.**
 
-Process videos through transcription, AI enrichment, speaker diarization, clip generation, and social media package creation - all with organized show-based folder structure and intelligent naming.
+Process videos through multilingual transcription, AI enrichment, speaker diarization, clip generation, and social media package creation - all with organized show-based folder structure and intelligent naming. Now supports 10+ languages with automatic detection and translation capabilities.
 
 ## 🚀 Quick Start
 
@@ -35,6 +35,7 @@ data/social_packages/{episode_id}/{platform}/  # Social media packages
 **📚 Documentation:**
 
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** - Quick start guide
+- **[docs/MULTILINGUAL_SUPPORT.md](docs/MULTILINGUAL_SUPPORT.md)** - Multilingual transcription guide
 - **[docs/NAMING_SYSTEM.md](docs/NAMING_SYSTEM.md)** - Episode naming and organization
 - **[docs/n8n_docs/](docs/n8n_docs/)** - n8n integration guides
 - **[NAMING_INTEGRATION_COMPLETE.md](NAMING_INTEGRATION_COMPLETE.md)** - Latest features
@@ -48,19 +49,22 @@ AI-EWG is an intelligent video processing pipeline that automates the transforma
 ### **Processing Pipeline:**
 
 1. **Discovery** - Automatically find and catalog video files
-2. **Transcription** - OpenAI Whisper with word-level timestamps
-3. **Enrichment** - AI-powered metadata extraction (show name, host, topics, summaries)
-4. **Diarization** - Speaker identification and segmentation
-5. **Rendering** - Generate interactive HTML pages with synchronized video/transcript
-6. **Clip Generation** - Intelligent highlight detection and video clip creation
-7. **Social Packages** - Platform-specific content for YouTube, Instagram, TikTok, etc.
-8. **Organization** - Automatic folder structure by show and year
+2. **Multilingual Transcription** - OpenAI Whisper with auto language detection (10+ languages)
+3. **Translation** - Optional translation to English with metadata preservation
+4. **Enrichment** - AI-powered metadata extraction (show name, host, topics, summaries)
+5. **Diarization** - Speaker identification and segmentation
+6. **Rendering** - Generate interactive HTML pages with synchronized video/transcript
+7. **Clip Generation** - Intelligent highlight detection and video clip creation
+8. **Social Packages** - Platform-specific content for YouTube, Instagram, TikTok, etc.
+9. **Organization** - Automatic folder structure by show and year
 
 ## ✨ Key Features
 
 ### **AI-Powered Processing**
 
-✅ **Whisper Transcription** - State-of-the-art speech-to-text with GPU acceleration (FP16)  
+✅ **Multilingual Transcription** - Auto language detection for 10+ languages (EN, ES, FR, DE, IT, PT, RU, JA, KO, ZH)  
+✅ **Translation Support** - Optional translation to English with metadata preservation  
+✅ **Whisper GPU Acceleration** - State-of-the-art speech-to-text with FP16 optimization  
 ✅ **AI Enrichment** - Automatic show name, host, episode number extraction  
 ✅ **Speaker Diarization** - Identify and label different speakers  
 ✅ **Topic Segmentation** - Semantic boundary detection with embeddings (GPU accelerated)  
@@ -74,6 +78,15 @@ AI-EWG is an intelligent video processing pipeline that automates the transforma
 ✅ **Automatic Mapping** - AI show names mapped to consistent folders  
 ✅ **Configurable Templates** - Customize naming via YAML config  
 ✅ **Backward Compatible** - Supports both old and new structures
+
+### **Multilingual Support**
+
+✅ **Auto Language Detection** - Whisper automatically detects spoken language  
+✅ **10+ Languages Supported** - English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese  
+✅ **Translation Options** - Optional translation to English for international content  
+✅ **Language Metadata** - Tracks detected language, translation status, and original language  
+✅ **Validation & Fallbacks** - Validates against supported languages with graceful fallbacks  
+✅ **Performance Optimized** - Minimal overhead with full GPU acceleration
 
 ### **Multi-Platform Output**
 
@@ -188,6 +201,13 @@ organization:
 models:
   whisper: "large-v3"
   llm: "llama3.1:latest"
+
+# Multilingual transcription configuration
+transcription:
+  language: "auto"  # Auto-detect language
+  translate_to_english: false  # Keep original language
+  supported_languages: ["en", "es", "fr", "de", "it", "pt", "ru", "ja", "ko", "zh"]
+  fallback_language: "en"
   
 sources:
   - path: "test_videos/newsroom/2024"
@@ -255,6 +275,36 @@ response = requests.get(f"http://localhost:8000/social/jobs/{job_id}")
 print(f"Packages: {response.json()['packages_generated']}")
 ```
 
+### **Multilingual Processing**
+
+```python
+# Process Spanish content with auto-detection
+response = requests.post(
+    f"http://localhost:8000/episodes/{episode_id}/process",
+    json={"target_stage": "rendered"}
+)
+
+# Check language detection results
+response = requests.get(f"http://localhost:8000/episodes/{episode_id}")
+transcription = response.json()["transcription"]
+
+print(f"Detected Language: {transcription['detected_language']}")
+print(f"Original Language: {transcription['original_language']}")
+print(f"Translated to English: {transcription['translated_to_english']}")
+print(f"Task Performed: {transcription['task_performed']}")
+```
+
+**Example Output:**
+```json
+{
+  "detected_language": "es",
+  "original_language": "es", 
+  "translated_to_english": false,
+  "task_performed": "transcribe",
+  "text": "Buenos días, estas son las noticias del día..."
+}
+```
+
 ## 📁 Episode Naming & Organization
 
 ### **Naming Format**
@@ -300,6 +350,24 @@ AI-extracted show names are automatically mapped to consistent folder names:
 See [docs/NAMING_SYSTEM.md](docs/NAMING_SYSTEM.md) for complete documentation.
 
 ## 🧪 Testing
+
+### **Test Multilingual Support**
+
+```powershell
+# Test multilingual configuration and processing
+python test_multilingual.py
+```
+
+**Expected Output:**
+```
+🚀 Starting multilingual support tests...
+✅ Configuration Loading: PASSED
+✅ Processor Initialization: PASSED  
+✅ Language Validation: PASSED
+✅ Transcription Result Simulation: PASSED
+📊 Test Results: 4/4 tests passed
+🎉 All multilingual tests passed!
+```
 
 ### **Test Naming Service**
 
