@@ -280,15 +280,25 @@ def register_clip_endpoints(app: FastAPI):
             
             # Create clip specification from clip object
             from ..core.clip_specification import ClipSpecification, ClipVariantSpec
+            from ..core.naming_service import get_naming_service
+            from pathlib import Path
+            
+            # Get proper episode folder path using naming service
+            naming_service = get_naming_service()
+            episode_date = episode.metadata.date if hasattr(episode.metadata, 'date') and episode.metadata.date else episode.created_at
+            episode_folder = naming_service.get_episode_folder_path(
+                episode_id=episode.episode_id,
+                show_name=episode.metadata.show_name,
+                date=episode_date,
+                base_path="data/outputs"
+            )
             
             # Create variant specifications
             variant_specs = []
             for variant in request.variants:
                 for aspect_ratio in request.aspect_ratios:
-                    # Generate output path directly to data/clips (not using naming service folder structure)
-                    from pathlib import Path
-                    
-                    output_path = str(Path("data/clips") / clip.episode_id / clip.id / f"{aspect_ratio}_{variant}.mp4")
+                    # Generate output path in proper folder structure: data/outputs/{show}/{year}/{episode}/clips/{clip_id}/{aspect}_{variant}.mp4
+                    output_path = str(episode_folder / "clips" / clip.id / f"{aspect_ratio}_{variant}.mp4")
                     
                     variant_spec = ClipVariantSpec(
                         variant=variant,
@@ -468,15 +478,27 @@ def register_clip_endpoints(app: FastAPI):
                     
                     # Create clip specification from clip object
                     from ..core.clip_specification import ClipSpecification, ClipVariantSpec
+                    from ..core.naming_service import get_naming_service
+                    from pathlib import Path
+                    
+                    # Get proper episode folder path using naming service (reuse from outer scope if available)
+                    if 'naming_service' not in locals():
+                        naming_service = get_naming_service()
+                    if 'episode_folder' not in locals():
+                        episode_date = episode.metadata.date if hasattr(episode.metadata, 'date') and episode.metadata.date else episode.created_at
+                        episode_folder = naming_service.get_episode_folder_path(
+                            episode_id=episode.episode_id,
+                            show_name=episode.metadata.show_name,
+                            date=episode_date,
+                            base_path="data/outputs"
+                        )
                     
                     # Create variant specifications
                     variant_specs = []
                     for variant in request.variants:
                         for aspect_ratio in request.aspect_ratios:
-                            # Generate output path directly to data/clips (not using naming service folder structure)
-                            from pathlib import Path
-                            
-                            output_path = str(Path("data/clips") / clip.episode_id / clip.id / f"{aspect_ratio}_{variant}.mp4")
+                            # Generate output path in proper folder structure: data/outputs/{show}/{year}/{episode}/clips/{clip_id}/{aspect}_{variant}.mp4
+                            output_path = str(episode_folder / "clips" / clip.id / f"{aspect_ratio}_{variant}.mp4")
                             
                             variant_spec = ClipVariantSpec(
                                 variant=variant,
