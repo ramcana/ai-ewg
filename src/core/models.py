@@ -132,7 +132,7 @@ class EpisodeMetadata:
 
 @dataclass
 class TranscriptionResult:
-    """Result of transcription processing"""
+    """Result of transcription processing with multilingual support"""
     text: str
     vtt_content: str
     segments: List[Dict[str, Any]] = field(default_factory=list)
@@ -142,12 +142,21 @@ class TranscriptionResult:
     words: List[Dict[str, Any]] = field(default_factory=list)  # Word-level timestamps for clip generation
     diarization: Optional[Dict[str, Any]] = None  # Speaker diarization data
     
+    # Multilingual support fields
+    detected_language: Optional[str] = None  # Language detected by Whisper
+    original_language: Optional[str] = None  # Raw Whisper language detection
+    task_performed: str = "transcribe"  # "transcribe" or "translate"
+    translated_to_english: bool = False  # True if content was translated to English
+    
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'TranscriptionResult':
-        return cls(**data)
+        # Remove legacy fields that are no longer in the model
+        legacy_fields = ['word_count', 'duration', 'speaker_count']
+        cleaned_data = {k: v for k, v in data.items() if k not in legacy_fields}
+        return cls(**cleaned_data)
 
 
 @dataclass
