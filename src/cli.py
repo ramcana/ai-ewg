@@ -8,12 +8,12 @@ validation, status reporting, and processing controls.
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import Optional
 
-import sys
-import os
+# Add parent directory to path for module imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core import (
@@ -183,8 +183,8 @@ async def recover_command(args) -> int:
             from_stage = ProcessingStage(args.from_stage)
             print(f"Recovering from stage: {from_stage.value}")
             
-            # Process from specified stage
-            result = await orchestrator.process_episode(args.episode_id, ProcessingStage.RENDERED)
+            # Process from specified stage (use from_stage as target, not hardcoded RENDERED)
+            result = await orchestrator.process_episode(args.episode_id, from_stage)
             
             if result.success:
                 print(f"✓ Recovery completed successfully in {result.duration:.1f}s")

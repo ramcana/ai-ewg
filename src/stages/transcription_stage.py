@@ -9,6 +9,7 @@ Creates:
 
 from pathlib import Path
 from typing import Dict, Any
+import asyncio
 import torch
 
 from ..core.logging import get_logger
@@ -92,7 +93,9 @@ class TranscriptionStageProcessor:
             # Set FP16 for GPU acceleration
             fp16 = torch.cuda.is_available()
             
-            result = self.model.transcribe(
+            # Offload blocking Whisper inference to thread executor
+            result = await asyncio.to_thread(
+                self.model.transcribe,
                 str(audio_file),
                 language=whisper_language,  # Auto-detect or specified language
                 task=whisper_task,  # transcribe or translate

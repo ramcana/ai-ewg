@@ -33,6 +33,9 @@ from ..core.intelligence_chain_v2 import IntelligenceChainOrchestratorV2
 from ..core.config import PipelineConfig
 from ..core.correction_engine import create_correction_engine
 
+# Initialize logger before any imports that might fail
+logger = get_logger('pipeline.enrichment_stage')
+
 # Import diarization utility
 import sys
 from pathlib import Path
@@ -44,8 +47,6 @@ try:
 except ImportError:
     DIARIZATION_AVAILABLE = False
     logger.warning("Diarization not available - pyannote.audio not installed")
-
-logger = get_logger('pipeline.enrichment_stage')
 
 
 class EnrichmentStageProcessor:
