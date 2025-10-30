@@ -848,11 +848,39 @@ class PipelineOrchestrator:
                 if any(video_file.match(exclude) for exclude in source.exclude):
                     continue
                 
-                # Generate episode ID
+                # Generate structured episode ID using NamingService
+                from .naming_service import get_naming_service
+                import re
+                
+                naming_service = get_naming_service()
                 filename = video_file.stem
-                show_name = video_file.parent.parent.name  # e.g., "newsroom"
-                year = video_file.parent.name  # e.g., "2024"
-                episode_id = f"{show_name}-{year}-{filename.lower()}"
+                
+                # Infer show name from folder structure
+                # Path structure: input_videos/TheNewsForum/ForumDailyNews/video.mp4
+                # or: data/temp/uploaded/video.mp4
+                parent_folder = video_file.parent.name
+                grandparent_folder = video_file.parent.parent.name if video_file.parent.parent else None
+                
+                # Try to map folder name to show name
+                show_name = None
+                if parent_folder and parent_folder != "uploaded":
+                    show_name = parent_folder
+                elif grandparent_folder and grandparent_folder != "temp":
+                    show_name = grandparent_folder
+                
+                # Try to extract episode number from filename
+                episode_number = None
+                match = re.search(r'(?:FD|EP|E)?(\d{3,4})', filename, re.IGNORECASE)
+                if match:
+                    episode_number = match.group(1)
+                
+                # Generate structured episode ID
+                episode_id = naming_service.generate_episode_id(
+                    show_name=show_name,
+                    episode_number=episode_number,
+                    date=datetime.fromtimestamp(video_file.stat().st_mtime),
+                    source_filename=filename
+                )
                 
                 # Calculate file hash for content-based deduplication
                 file_hash = self._calculate_file_hash(video_file)
