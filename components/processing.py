@@ -442,7 +442,7 @@ class VideoProcessingInterface:
         with col2:
             auto_clips = st.checkbox(
                 "Auto-generate Clips",
-                value=True,
+                value=False,
                 help="Automatically generate clips after episode processing"
             )
             
@@ -1471,18 +1471,16 @@ class VideoProcessingInterface:
             episodes = []
             discover_response = None  # Initialize to avoid UnboundLocalError
             
+            # Normalize selected file paths for comparison (define early for all code paths)
+            selected_paths = {str(Path(f).resolve()) for f in selected_video_files} if selected_video_files else set()
+            
             if selected_video_files:
-                # User selected specific files - skip full discovery and get existing episodes
                 st.info(f"🔍 Loading {len(selected_video_files)} selected file(s) from database...")
                 
-                # Get all episodes from database
-                list_response = self.api_client.list_episodes()
+                list_response = self.api_client.list_episodes(limit=1000)
                 
                 if list_response.success and list_response.data:
                     all_episodes_data = list_response.data.get('episodes', []) if isinstance(list_response.data, dict) else list_response.data
-                    
-                    # Normalize selected file paths for comparison
-                    selected_paths = {str(Path(f).resolve()) for f in selected_video_files}
                     
                     # Find matching episodes
                     for episode_data in all_episodes_data:
