@@ -454,6 +454,27 @@ class PipelineApiClient:
         
         return self._make_request('POST', '/episodes/batch', data=data)
     
+    def delete_episode(
+        self,
+        episode_id: str,
+        delete_files: bool = True
+    ) -> ApiResponse:
+        """
+        Delete an episode and optionally all its generated files
+        
+        Args:
+            episode_id: Episode identifier
+            delete_files: Whether to delete all generated files (default: True)
+            
+        Returns:
+            ApiResponse: Deletion result with list of deleted files
+        """
+        params = {
+            "delete_files": delete_files
+        }
+        
+        return self._make_request('DELETE', f'/episodes/{episode_id}', params=params)
+    
     def discover_clips(
         self,
         episode_id: str,

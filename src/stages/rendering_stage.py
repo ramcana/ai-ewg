@@ -99,8 +99,14 @@ class RenderingStageProcessor:
             episode_dir.mkdir(parents=True, exist_ok=True)
             
             # Copy transcripts to assets
-            txt_src = Path(transcript_data['txt_path'])
-            vtt_src = Path(transcript_data['vtt_path'])
+            # Build paths from episode_id if not in transcript_data
+            if 'txt_path' in transcript_data:
+                txt_src = Path(transcript_data['txt_path'])
+                vtt_src = Path(transcript_data['vtt_path'])
+            else:
+                # Fallback to standard paths
+                txt_src = Path(f"data/transcripts/txt/{episode.episode_id}.txt")
+                vtt_src = Path(f"data/transcripts/vtt/{episode.episode_id}.vtt")
             
             txt_dest = self.assets_dir / f"{episode.episode_id}.txt"
             vtt_dest = self.assets_dir / f"{episode.episode_id}.vtt"

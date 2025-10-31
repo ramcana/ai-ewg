@@ -694,7 +694,7 @@ def render_package_generation_tab():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🚀 Generate Social Packages", type="primary", use_container_width=True):
+        if st.button("🚀 Generate Social Packages", type="primary", width='stretch'):
             with st.spinner("Submitting package generation job..."):
                 try:
                     # Call new API endpoint
@@ -729,7 +729,7 @@ def render_package_generation_tab():
                     st.error(f"❌ Error submitting job: {str(e)}")
     
     with col2:
-        if st.button("👁️ Preview Packages", use_container_width=True):
+        if st.button("👁️ Preview Packages", width='stretch'):
             # Show preview of what would be generated
             st.markdown("### Package Preview")
             

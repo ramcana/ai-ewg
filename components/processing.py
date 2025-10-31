@@ -2275,6 +2275,96 @@ def render_video_processing_page():
     # Initialize processing interface
     interface = VideoProcessingInterface()
     
+    # Show previously processed videos at the top
+    with st.expander("📚 Previously Processed Videos", expanded=False):
+        try:
+            from utils.api_client import create_api_client
+            api_client = create_api_client()
+            
+            # Get list of episodes
+            response = api_client.list_episodes(limit=100, force_refresh=True)
+            
+            if response.success and response.data:
+                episodes = response.data
+                
+                if episodes:
+                    st.write(f"**Total Episodes:** {len(episodes)}")
+                    
+                    # Create a simple table
+                    import pandas as pd
+                    
+                    table_data = []
+                    for ep in episodes:
+                        table_data.append({
+                            'Episode ID': ep.get('episode_id', 'N/A')[:30],
+                            'Title': ep.get('title', 'N/A')[:40],
+                            'Show': ep.get('show_name', 'Unknown'),
+                            'Stage': ep.get('stage', 'N/A'),
+                            'Status': '✅' if ep.get('stage') == 'rendered' else '⚠️'
+                        })
+                    
+                    df = pd.DataFrame(table_data)
+                    
+                    # Display with selection
+                    st.dataframe(df, width='stretch', hide_index=True)
+                    
+                    # Quick actions
+                    st.markdown("---")
+                    st.write("**Quick Actions:**")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        if st.button("🔄 Refresh List", key="refresh_processed_list", width='stretch'):
+                            st.rerun()
+                    
+                    with col2:
+                        if st.button("📁 View All Outputs", key="goto_outputs", width='stretch'):
+                            st.session_state['current_page'] = 'View Outputs'
+                            st.rerun()
+                    
+                    with col3:
+                        # Delete failed episodes button
+                        failed_count = sum(1 for ep in episodes if ep.get('stage') == 'failed')
+                        if failed_count > 0:
+                            if st.button(f"🗑️ Clean Failed ({failed_count})", key="clean_failed", type="secondary", width='stretch'):
+                                st.session_state['show_bulk_delete'] = True
+                    
+                    # Bulk delete confirmation
+                    if st.session_state.get('show_bulk_delete', False):
+                        st.warning(f"⚠️ Delete all {failed_count} failed episodes?")
+                        col_yes, col_no = st.columns(2)
+                        
+                        with col_yes:
+                            if st.button("✅ Yes, Delete All Failed", key="confirm_bulk_delete", type="primary", width='stretch'):
+                                with st.spinner("Deleting failed episodes..."):
+                                    deleted_count = 0
+                                    for ep in episodes:
+                                        if ep.get('stage') == 'failed':
+                                            try:
+                                                response = api_client.delete_episode(ep['episode_id'], delete_files=True)
+                                                if response.success:
+                                                    deleted_count += 1
+                                            except Exception as e:
+                                                st.error(f"Failed to delete {ep['episode_id']}: {e}")
+                                    
+                                    st.success(f"✅ Deleted {deleted_count} failed episodes!")
+                                    st.session_state['show_bulk_delete'] = False
+                                    st.rerun()
+                        
+                        with col_no:
+                            if st.button("❌ Cancel", key="cancel_bulk_delete", width='stretch'):
+                                st.session_state['show_bulk_delete'] = False
+                                st.rerun()
+                else:
+                    st.info("No processed videos found yet.")
+            else:
+                st.warning("Unable to load processed videos list.")
+        except Exception as e:
+            st.error(f"Error loading processed videos: {str(e)}")
+    
+    st.markdown("---")
+    
     # Render folder input section
     folder_path, processing_options = interface.render_folder_input_section()
     

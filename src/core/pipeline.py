@@ -601,12 +601,21 @@ class PipelineOrchestrator:
             # Update episode with enrichment data
             episode.enrichment = enrichment_result
             
-            # Regenerate episode ID if we have show name from AI
+            # Update episode metadata with AI-extracted show name and regenerate ID if needed
             old_episode_id = episode_id
             if enrichment_result.show_name:
                 from .naming_service import get_naming_service
                 import re
                 naming_service = get_naming_service()
+                
+                # Update metadata with AI-extracted show name
+                episode.metadata.show_name = enrichment_result.show_name
+                episode.metadata.show_slug = naming_service.map_show_name(enrichment_result.show_name)
+                
+                self.logger.info("Updated episode metadata with AI-extracted show name",
+                               episode_id=episode_id,
+                               show_name=enrichment_result.show_name,
+                               show_slug=episode.metadata.show_slug)
                 
                 # Try to extract episode number from enrichment or filename
                 episode_number = enrichment_result.episode_number
@@ -940,7 +949,7 @@ class PipelineOrchestrator:
                     ),
                     metadata=EpisodeMetadata(
                         show_name=show_name,
-                        show_slug=show_name.lower(),
+                        show_slug=show_name.lower() if show_name else "uncategorized",
                         title=filename
                     )
                 )

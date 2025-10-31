@@ -1,0 +1,18 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@example.com
+      name: Administrator
+      password: $2b$12$RxyTeF7MN42s1WM0tNoRu.JBlSqIW7GlGkgBklldTmCm.qaYKEik2 # admin123
+    editor:
+      email: editor@example.com
+      name: Content Editor
+      password: $2b$12$.P8C0fitU8k.h7/yP8p.6uOZ04YcTzQsnwRQ6a8da0UAGT0t4yU3S # editor123
+
+cookie:
+  expiry_days: 30
+  key: random_signature_key_12345
+  name: auth_cookie
+
+preauthorized:
+  emails: []

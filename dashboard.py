@@ -17,6 +17,7 @@ from components.outputs import render_view_outputs_page
 from components.clips import render_clip_management_page
 from components.social_generator import render_social_package_generation_interface
 from components.corrections import render_correction_management_page
+from components.show_config import render_show_configuration_page
 
 # Page configuration
 st.set_page_config(
@@ -261,6 +262,7 @@ def render_sidebar():
             # Navigation menu with icons and descriptions
             pages = [
                 ("Dashboard", "📊", "System overview and quick actions"),
+                ("Show Configuration", "📺", "Configure show mappings and metadata"),
                 ("Process Videos", "🎬", "Upload and process video content"), 
                 ("View Outputs", "📁", "Browse generated files and content"),
                 ("Clip Management", "✂️", "Configure and manage video clips"),
@@ -308,7 +310,7 @@ def render_sidebar():
             # Show selected episode if any
             if st.session_state.get('selected_episode_id'):
                 episode_id = st.session_state['selected_episode_id']
-                episode_data = st.session_state.get('selected_episode_data', {})
+                episode_data = st.session_state.get('selected_episode_data') or {}
                 title = episode_data.get('title', 'Unknown Title')
                 
                 theme_mode = st.session_state.get('theme_mode', 'light')
@@ -1158,6 +1160,8 @@ def main():
     with st.container():
         if current_page == 'Dashboard':
             render_dashboard_page()
+        elif current_page == 'Show Configuration':
+            render_show_configuration_page()
         elif current_page == 'Process Videos':
             render_video_processing_page()
         elif current_page == 'View Outputs':

@@ -345,10 +345,64 @@ class OutputBrowserInterface:
         if episode_data['error']:
             st.error(f"**Error:** {episode_data['error']}")
         
-        # Episode statistics button
-        if st.button(f"📊 View Detailed Statistics", key=f"stats_{episode_id}"):
-            preview_interface = ContentPreviewInterface()
-            preview_interface.render_episode_statistics(episode_id)
+        # Action buttons
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button(f"📊 View Detailed Statistics", key=f"stats_{episode_id}", width='stretch'):
+                preview_interface = ContentPreviewInterface()
+                preview_interface.render_episode_statistics(episode_id)
+        
+        with col2:
+            if st.button(f"🔄 Reprocess Episode", key=f"reprocess_{episode_id}", width='stretch'):
+                st.info("Reprocessing feature coming soon!")
+        
+        with col3:
+            if st.button(f"🗑️ Delete Episode", key=f"delete_{episode_id}", type="secondary", width='stretch'):
+                st.session_state[f'confirm_delete_{episode_id}'] = True
+        
+        # Confirmation dialog for deletion
+        if st.session_state.get(f'confirm_delete_{episode_id}', False):
+            st.warning(f"⚠️ **Are you sure you want to delete this episode?**")
+            st.write("This will:")
+            st.write("- Remove episode from database")
+            st.write("- Delete all transcripts, clips, and social packages")
+            st.write("- Delete rendered HTML and metadata")
+            st.write("- Free up disk space")
+            st.write(f"- **Total size to be freed: {episode_data['total_size_mb']:.1f} MB**")
+            
+            col_confirm, col_cancel = st.columns(2)
+            
+            with col_confirm:
+                if st.button("✅ Yes, Delete Everything", key=f"confirm_yes_{episode_id}", type="primary", width='stretch'):
+                    with st.spinner(f"Deleting episode {episode_id}..."):
+                        try:
+                            # Call API to delete episode
+                            response = self.api_client.delete_episode(episode_id, delete_files=True)
+                            
+                            if response.success:
+                                st.success(f"✅ Episode deleted successfully!")
+                                st.write(f"**Files deleted:** {response.data.get('files_deleted', 0)}")
+                                
+                                # Clear session state
+                                if f'confirm_delete_{episode_id}' in st.session_state:
+                                    del st.session_state[f'confirm_delete_{episode_id}']
+                                if 'selected_episode_id' in st.session_state:
+                                    del st.session_state['selected_episode_id']
+                                
+                                # Force refresh
+                                st.session_state['force_refresh'] = True
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed to delete episode: {response.error}")
+                        except Exception as e:
+                            st.error(f"❌ Error deleting episode: {str(e)}")
+            
+            with col_cancel:
+                if st.button("❌ Cancel", key=f"confirm_no_{episode_id}", width='stretch'):
+                    del st.session_state[f'confirm_delete_{episode_id}']
+                    st.rerun()
         
         # File structure details
         file_structure = episode_data['file_structure']

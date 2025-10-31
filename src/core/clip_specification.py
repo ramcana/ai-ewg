@@ -396,10 +396,10 @@ class ClipSpecificationEngine:
         Returns:
             Relative output file path
         """
-        # Format: outputs/{episode_id}/clips/{clip_id}/{aspect_ratio}_{variant}.mp4
+        # Format: data/clips/{episode_id}/{clip_id}/{aspect_ratio}_{variant}.mp4
         filename = f"{aspect_ratio}_{variant}.mp4"
         
-        output_path = self.output_base_dir / episode_id / "clips" / clip_id / filename
+        output_path = self.output_base_dir / episode_id / clip_id / filename
         
         return str(output_path)
     

@@ -307,7 +307,7 @@ class TestUtilities:
         """Test path utilities work on Windows"""
         from pathlib import Path
         
-        test_path = Path("D:/test/path/video.mp4")
+        test_path = Path("test/path/video.mp4")
         
         assert test_path.suffix == ".mp4"
         assert test_path.stem == "video"
@@ -318,7 +318,7 @@ class TestUtilities:
         
         data = {
             "timestamp": datetime.now().isoformat(),
-            "path": str(Path("D:/test/video.mp4")),
+            "path": str(Path("test/video.mp4")),
             "duration": 60.5,
             "success": True
         }

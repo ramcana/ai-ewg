@@ -141,6 +141,10 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     from .async_endpoints import register_async_endpoints
     register_async_endpoints(app)
     
+    # Register social media publishing endpoints
+    from .social_endpoints import router as social_router
+    app.include_router(social_router)
+    
     return app
 
 

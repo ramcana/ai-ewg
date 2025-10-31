@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 import re
+import json
 from dataclasses import dataclass
 
 from .logging import get_logger
@@ -82,9 +83,35 @@ class NamingService:
             config: Naming configuration (uses defaults if not provided)
         """
         self.config = config or NamingConfig()
+        self.show_mappings = self._load_show_mappings()
         logger.info("NamingService initialized",
                    folder_structure=self.config.folder_structure,
-                   episode_template=self.config.episode_template)
+                   episode_template=self.config.episode_template,
+                   show_mappings_count=len(self.show_mappings))
+    
+    def _load_show_mappings(self) -> Dict[str, str]:
+        """
+        Load show name mappings from config file, fallback to defaults
+        
+        Returns:
+            Dictionary mapping AI-extracted names to folder names
+        """
+        config_file = Path("config/show_mappings.json")
+        
+        if config_file.exists():
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    mappings = json.load(f)
+                logger.info("Loaded show mappings from config file",
+                           count=len(mappings),
+                           path=str(config_file))
+                return mappings
+            except Exception as e:
+                logger.warning("Failed to load show mappings from config, using defaults",
+                              error=str(e))
+        
+        # Return default mappings
+        return SHOW_NAME_MAPPING.copy()
     
     def generate_episode_id(self, 
                            show_name: Optional[str] = None,
@@ -209,9 +236,9 @@ class NamingService:
         # Normalize for lookup
         normalized = show_name.lower().strip()
         
-        # Check mapping
-        if normalized in SHOW_NAME_MAPPING:
-            folder_name = SHOW_NAME_MAPPING[normalized]
+        # Check mapping (use loaded mappings instead of hardcoded)
+        if normalized in self.show_mappings:
+            folder_name = self.show_mappings[normalized]
             logger.debug("Mapped show name",
                         input=show_name,
                         output=folder_name)

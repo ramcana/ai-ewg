@@ -139,11 +139,23 @@ class ClipDiscoveryEngine:
                 if seg.final_score >= score_threshold
             ]
             
+            # Log score distribution for debugging
+            if scored_segments:
+                scores = [seg.final_score for seg in scored_segments]
+                max_score = max(scores)
+                min_score = min(scores)
+                avg_score = sum(scores) / len(scores)
+                logger.info(f"Score distribution: min={min_score:.3f}, max={max_score:.3f}, avg={avg_score:.3f}, threshold={score_threshold:.3f}",
+                           episode_id=episode_id)
+            
             logger.info(f"Filtered to {len(filtered_segments)} segments above threshold {score_threshold}", 
                        episode_id=episode_id)
             
             if not filtered_segments:
-                logger.warning(f"No segments above score threshold", episode_id=episode_id)
+                logger.warning(f"No segments above score threshold {score_threshold}. Try lowering the threshold or check if episode has good content.", 
+                              episode_id=episode_id,
+                              total_segments=len(scored_segments),
+                              max_score=max(scores) if scores else 0)
                 return []
             
             # Step 4: Clip selection
@@ -218,7 +230,8 @@ class ClipDiscoveryEngine:
         except Exception as e:
             logger.error(f"Error discovering clips", 
                         episode_id=episode_id, 
-                        error=str(e))
+                        error=str(e),
+                        exc_info=True)
             raise
     
     async def _save_clips_metadata(self, episode_id: str, clips: List[ClipObject]):

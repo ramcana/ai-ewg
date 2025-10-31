@@ -381,6 +381,56 @@ class EpisodeRegistry:
                         error=str(e))
             raise DatabaseError(f"Failed to update episode hash: {e}")
     
+    def delete_episode(self, episode_id: str) -> bool:
+        """
+        Delete an episode and all related records from database
+        
+        Args:
+            episode_id: Episode identifier
+            
+        Returns:
+            True if episode was deleted, False if not found
+        """
+        try:
+            with self.connection.transaction() as conn:
+                # Delete related clips first (foreign key constraint)
+                conn.execute(
+                    "DELETE FROM clips WHERE episode_id = ?",
+                    (episode_id,)
+                )
+                
+                # Delete related social jobs
+                conn.execute(
+                    "DELETE FROM social_jobs WHERE episode_id = ?",
+                    (episode_id,)
+                )
+                
+                # Delete processing logs
+                conn.execute(
+                    "DELETE FROM processing_log WHERE episode_id = ?",
+                    (episode_id,)
+                )
+                
+                # Delete the episode itself
+                cursor = conn.execute(
+                    "DELETE FROM episodes WHERE id = ?",
+                    (episode_id,)
+                )
+                
+                if cursor.rowcount == 0:
+                    logger.warning("Episode not found for deletion", episode_id=episode_id)
+                    return False
+            
+            logger.info("Episode deleted from database",
+                       episode_id=episode_id)
+            return True
+            
+        except Exception as e:
+            logger.error("Failed to delete episode",
+                        episode_id=episode_id,
+                        error=str(e))
+            raise DatabaseError(f"Failed to delete episode: {e}")
+    
     def get_episodes_by_stage(self, stage: ProcessingStage) -> List[EpisodeObject]:
         """
         Get all episodes at a specific processing stage
