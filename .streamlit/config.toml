@@ -1,0 +1,17 @@
+[server]
+# Increase file upload size limit to 4GB (4096 MB)
+maxUploadSize = 4096
+
+# Optional: Increase message size limit for large file handling
+maxMessageSize = 4096
+
+# Optional: Enable file watcher for development
+fileWatcherType = "auto"
+
+[browser]
+# Optional: Gather usage stats (set to false for privacy)
+gatherUsageStats = false
+
+[theme]
+# Optional: Set default theme (users can still override)
+base = "light"

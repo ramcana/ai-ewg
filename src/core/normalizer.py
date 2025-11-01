@@ -16,6 +16,7 @@ from .models import EpisodeMetadata, EpisodeObject, MediaInfo, ContentHasher, So
 from .discovery import VideoFile
 from .exceptions import NormalizationError
 from .logging import get_logger
+from .naming_service import get_naming_service
 
 logger = get_logger('pipeline.normalizer')
 
@@ -400,9 +401,17 @@ class EpisodeNormalizer:
             # Create episode metadata
             metadata = self._create_episode_metadata(parsed, video_file)
             
-            # Generate episode ID
-            base_id = self.id_generator.generate_episode_id(metadata)
-            unique_id = self.id_generator.ensure_unique_id(base_id, existing_ids)
+            # Generate episode ID using naming service (fallback naming at discovery)
+            naming_service = get_naming_service()
+            episode_id = naming_service.generate_episode_id(
+                show_name=None,  # Will be set after AI enrichment
+                episode_number=None,
+                date=datetime.now(),
+                source_filename=Path(video_file.path).name
+            )
+            
+            # Ensure uniqueness
+            unique_id = self.id_generator.ensure_unique_id(episode_id, existing_ids)
             
             # Create media info (will be populated later in pipeline)
             media_info = MediaInfo()
@@ -533,7 +542,7 @@ class EpisodeNormalizer:
         dates = []
         
         for episode in episodes:
-            show_name = episode.metadata.show_name
+            show_name = episode.get_show_name()
             if show_name not in shows:
                 shows[show_name] = {
                     'count': 0,

@@ -52,14 +52,28 @@
         },
         {
             "parameters": {
-                "jsCode": "// Get configuration from Set node\nconst config = $input.first().json;\nconst folderPath = config.folder_path;\nconst targetStage = config.target_stage;\nconst forceReprocess = config.force_reprocess;\n\n// Define your video files (update this list as needed)\nconst videoFiles = [\n  'BB580.mp4',\n  'CI166.mp4',\n  'CJ335.mp4',\n  'CP557.mp4',\n  'EMP140.mp4',\n  'FD1307_10-16-25.mp4',\n  'FFCSFN2025_01.mp4',\n  'MG096.mp4',\n  'OSS096.mp4',\n  'SL031.mp4'\n];\n\n// Generate episode data\nconst episodes = videoFiles.map(filename => {\n  const baseName = filename.replace(/\\.[^/.]+$/, ''); // Remove extension\n  const episodeId = `newsroom-2024-${baseName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;\n  \n  return {\n    filename: filename,\n    full_path: `${folderPath}/${filename}`,\n    episode_id: episodeId,\n    base_name: baseName,\n    target_stage: targetStage,\n    force_reprocess: forceReprocess\n  };\n});\n\nconsole.log(`🎬 Processing Configuration:`);\nconsole.log(`   📁 Folder: ${folderPath}`);\nconsole.log(`   🎯 Target Stage: ${targetStage}`);\nconsole.log(`   🔄 Force Reprocess: ${forceReprocess}`);\nconsole.log(`   📹 Videos: ${episodes.length}`);\nconsole.log('');\nconsole.log('📋 Episode List:');\nepisodes.forEach((ep, index) => {\n  console.log(`   ${index + 1}. ${ep.filename} → ${ep.episode_id}`);\n});\nconsole.log('');\n\nreturn episodes;"
+                "command": "=find {{ $json.folder_path }} -maxdepth 1 -name '*.mp4' -type f -exec basename {} \\;"
+            },
+            "id": "list-video-files",
+            "name": "List Video Files",
+            "type": "n8n-nodes-base.executeCommand",
+            "typeVersion": 1,
+            "position": [
+                680,
+                300
+            ],
+            "notes": "Lists all .mp4 files in the specified folder using find command (BusyBox/Docker compatible)"
+        },
+        {
+            "parameters": {
+                "jsCode": "const config = $('Set Configuration').first().json;\nconst commandOutput = $input.first().json.stdout;\n\nif (!commandOutput || commandOutput.trim() === '') {\n  throw new Error(`No video files found in ${config.folder_path}`);\n}\n\n// Parse the command output - each line is a filename\nconst videoFiles = commandOutput\n  .trim()\n  .split('\\n')\n  .map(line => line.trim())\n  .filter(line => line.length > 0 && line.endsWith('.mp4'));\n\nif (videoFiles.length === 0) {\n  throw new Error(`No .mp4 files found in ${config.folder_path}`);\n}\n\nconsole.log(`🎬 Processing Configuration:`);\nconsole.log(`   📁 Folder: ${config.folder_path}`);\nconsole.log(`   🎯 Target Stage: ${config.target_stage}`);\nconsole.log(`   🔄 Force Reprocess: ${config.force_reprocess}`);\nconsole.log(`   📹 Videos Found: ${videoFiles.length}`);\nconsole.log('');\n\nconst episodes = videoFiles.map(filename => {\n  const baseName = filename.replace(/\\.[^/.]+$/, '');\n  const episodeId = `newsroom-2024-${baseName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;\n  \n  return {\n    filename: filename,\n    full_path: `${config.folder_path}/${filename}`,\n    episode_id: episodeId,\n    base_name: baseName,\n    target_stage: config.target_stage,\n    force_reprocess: config.force_reprocess\n  };\n});\n\nconsole.log('📋 Episode List:');\nepisodes.forEach((ep, index) => {\n  console.log(`   ${index + 1}. ${ep.filename} → ${ep.episode_id}`);\n});\nconsole.log('');\n\nreturn episodes;"
             },
             "id": "prepare-episodes",
             "name": "Prepare Episodes",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                680,
+                880,
                 300
             ]
         },
@@ -74,7 +88,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.1,
             "position": [
-                800,
+                1080,
                 300
             ],
             "continueOnFail": true
@@ -88,7 +102,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1000,
+                1280,
                 300
             ]
         },
@@ -108,7 +122,7 @@
             "type": "n8n-nodes-base.if",
             "typeVersion": 2,
             "position": [
-                1200,
+                1480,
                 300
             ]
         },
@@ -135,7 +149,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.1,
             "position": [
-                1400,
+                1680,
                 300
             ]
         },
@@ -148,7 +162,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1620,
+                1880,
                 300
             ]
         },
@@ -161,7 +175,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1840,
+                2080,
                 300
             ]
         }
@@ -179,6 +193,17 @@
             ]
         },
         "Set Configuration": {
+            "main": [
+                [
+                    {
+                        "node": "List Video Files",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "List Video Files": {
             "main": [
                 [
                     {

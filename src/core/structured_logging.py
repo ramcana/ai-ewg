@@ -58,11 +58,12 @@ def setup_structured_logging(
         )
     
     # Configure structlog
+    import logging as stdlib_logging
+    log_level = getattr(stdlib_logging, level.upper(), stdlib_logging.INFO)
+    
     structlog.configure(
         processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(structlog.stdlib, level.upper(), structlog.INFO)
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(file=jsonl_file if jsonl_output else sys.stdout),
         cache_logger_on_first_use=True,

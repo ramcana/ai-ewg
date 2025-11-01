@@ -1,0 +1,53 @@
+# Example configuration with clip generation enabled
+sources:
+  - path: "test_videos/newsroom"
+    include: ["*.mp4", "*.mkv"]
+    enabled: true
+
+database:
+  path: "data/pipeline.db"
+  backup_enabled: true
+
+logging:
+  level: "INFO"
+  directory: "logs"
+
+processing:
+  max_concurrent_episodes: 2
+  max_retry_attempts: 3
+
+# Clip Generation Configuration
+clip_generation:
+  enabled: true
+  embedding_model: "bge-small-en"
+  max_clips_per_episode: 8
+  min_segment_duration_ms: 20000
+  max_segment_duration_ms: 120000
+  safe_padding_ms: 500
+
+  # LLM settings
+  llm_rerank_enabled: true
+  llm_model: "llama3"
+  llm_timeout: 30
+
+  # Performance settings
+  cache_embeddings: true
+  embedding_batch_size: 32
+  max_memory_percent: 80
+  max_cpu_percent: 70
+
+  # Scoring weights
+  heuristic_weights:
+    hook_phrases: 0.3
+    entity_density: 0.2
+    sentiment_peaks: 0.2
+    qa_patterns: 0.2
+    compression_ratio: 0.1
+
+  # Export settings
+  aspect_ratios: ["9x16", "16x9"]
+  variants: ["clean", "subtitled"]
+  video_codec: "libx264"
+  audio_codec: "aac"
+  crf: 20
+  preset: "veryfast"

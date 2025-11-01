@@ -14,7 +14,6 @@ from typing import Optional
 
 from ..core import PipelineOrchestrator, ConfigurationManager, get_logger
 from .endpoints import register_endpoints
-from .async_processing import register_async_endpoints
 
 logger = get_logger('pipeline.api')
 
@@ -32,6 +31,10 @@ class APIServer:
         try:
             self.orchestrator = PipelineOrchestrator(config_path=self.config_path)
             logger.info("Pipeline orchestrator initialized for API server")
+            
+            # Initialize database and registry
+            self.orchestrator.initialize_database()
+            logger.info("Database and registry initialized")
             
             # Verify SQLite configuration
             self._verify_sqlite_config()
@@ -135,8 +138,12 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     register_endpoints(app)
     
     # Register async processing endpoints
-    from .endpoints import get_orchestrator
-    register_async_endpoints(app, get_orchestrator)
+    from .async_endpoints import register_async_endpoints
+    register_async_endpoints(app)
+    
+    # Register social media publishing endpoints
+    from .social_endpoints import router as social_router
+    app.include_router(social_router)
     
     return app
 

@@ -2,19 +2,47 @@
 # This file defines the default configuration for the pipeline
 
 # Video source directories
+# Organized by show for better management
 sources:
-  - path: "D:/newsroom/videos"
-    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
-    exclude: ["*temp*", "*processing*"]
-    enabled: false
-  - path: "D:/n8n/ai-ewg/test_videos/newsroom/2024"
+  # Main input folder - organized by show
+  - path: "input_videos/TheNewsForum/ForumDailyNews"
     include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
     exclude: []
     enabled: true
-  - path: "/data/test_videos/newsroom/2024"
+  - path: "input_videos/TheNewsForum/BoomAndBust"
     include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
     exclude: []
     enabled: true
+  - path: "input_videos/TheNewsForum/CommunityProfile"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+  - path: "input_videos/TheNewsForum/EconomicPulse"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+  - path: "input_videos/TheNewsForum/FreedomForum"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: true
+  
+  # Uncategorized videos (to be sorted later)
+  - path: "input_videos/_uncategorized"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm", "*.flv"]
+    exclude: []
+    enabled: true
+  
+  # Temporary upload folder (from Streamlit uploads)
+  - path: "data/temp/uploaded"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm", "*.flv"]
+    exclude: []
+    enabled: true
+  
+  # Legacy folder (kept for backward compatibility - can be disabled later)
+  - path: "test_videos/newsroom/2024"
+    include: ["*.mp4", "*.mkv", "*.avi", "*.mov"]
+    exclude: []
+    enabled: false  # Disabled - use organized structure above
 
 # Staging area for temporary files
 staging:
@@ -33,22 +61,58 @@ models:
   whisper: "large-v3" # Use the best model with your GPU
   llm: "mistral"
   diarization_device: "cuda"
-  num_speakers: 2
+  num_speakers: 0  # 0 = auto-detect, or set to actual number if known
+
+# Multilingual transcription configuration
+transcription:
+  language: "auto"  # Auto-detect language, or specify: en, es, fr, de, it, pt, etc.
+  translate_to_english: false  # Set true to translate non-English audio to English
+  task: "transcribe"  # Options: "transcribe" or "translate"
+  supported_languages:
+    - en  # English
+    - es  # Spanish
+    - fr  # French
+    - de  # German
+    - it  # Italian
+    - pt  # Portuguese
+    - ru  # Russian
+    - ja  # Japanese
+    - ko  # Korean
+    - zh  # Chinese
+  fallback_language: "en"  # Fallback if detection fails
 
 # Ollama configuration for AI enrichment
 ollama:
   enabled: true
   host: "http://localhost:11434"
-  model: "llama3.1:latest"  # Best model for news analysis
-  timeout: 300  # 5 minutes for AI generation
-  
+  model: "llama3.1:latest" # Best model for news analysis
+  timeout: 300 # 5 minutes for AI generation
+
 # Enrichment configuration
 enrichment:
   ollama_enabled: true
   summary_max_tokens: 500
   takeaways_count: 7
   topics_count: 10
-  segment_chunk_size: 10  # Lines per segment
+  segment_chunk_size: 10 # Lines per segment
+
+# Episode naming and organization
+organization:
+  # Folder structure: {show_folder}/{year} creates "ForumDailyNews/2024/"
+  folder_structure: "{show_folder}/{year}"
+  
+  # Episode ID template: {show_folder}_ep{episode_number}_{date}
+  # Example: ForumDailyNews_ep140_2024-10-27
+  episode_template: "{show_folder}_ep{episode_number}_{date}"
+  
+  # Date format for episode IDs
+  date_format: "%Y-%m-%d"  # YYYY-MM-DD format
+  
+  # Fallback naming for episodes without AI-extracted show name
+  fallback_template: "{source_name}_{timestamp}"
+  
+  # Folder for uncategorized episodes
+  uncategorized_folder: "_uncategorized"
 
 # Confidence thresholds
 thresholds:
@@ -88,3 +152,32 @@ resources:
 
 # API rate limiting
 api_rate_limit_delay: 0.5
+
+# Intelligent crop configuration for clip generation
+intelligent_crop:
+  enabled: false  # Set to true to enable intelligent crop features
+  strategy: "hybrid"  # Options: center, face_tracking, motion_aware, speaker_tracking, hybrid
+  
+  # Face detection settings
+  face_detection:
+    enabled: true
+    interval: 5  # Analyze every N frames
+    min_confidence: 0.5
+    cascade_path: null  # Use default OpenCV cascade if null
+  
+  # Motion detection settings
+  motion_detection:
+    enabled: true
+    interval: 3  # Analyze every N frames
+    threshold: 25.0  # Motion sensitivity (lower = more sensitive)
+    min_area: 500  # Minimum motion area in pixels
+  
+  # Crop parameters
+  crop_params:
+    smooth_transitions: true
+    transition_smoothness: 0.3  # 0=instant, 1=very smooth
+    padding_percent: 0.15  # Extra space around detected region
+    max_analysis_fps: 10  # Downsample video for analysis performance
+  
+  # Performance
+  use_gpu: true  # Use GPU acceleration if available

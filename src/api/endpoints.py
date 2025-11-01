@@ -59,8 +59,9 @@ def _extract_outputs(orchestrator, episode_id: str, stage) -> Optional[Dict[str,
         if not episode:
             return None
         
-        show_name = episode.metadata.show_name if episode.metadata else "unknown"
-        show_slug = episode.metadata.show_slug if episode.metadata else show_name.lower().replace(' ', '-')
+        # Use helper methods for backward compatibility
+        show_name = episode.get_show_name()
+        show_slug = episode.get_show_slug()
         
         # Try multiple possible HTML paths
         possible_paths = [
@@ -199,6 +200,10 @@ def get_orchestrator():
 def register_endpoints(app: FastAPI):
     """Register all API endpoints"""
     
+    # Register clip endpoints
+    from .clip_endpoints import register_clip_endpoints
+    register_clip_endpoints(app)
+    
     @app.get("/", response_model=Dict[str, str])
     async def root():
         """Root endpoint"""
@@ -289,6 +294,180 @@ def register_endpoints(app: FastAPI):
             logger.error(f"Error getting episode status: {e}")
             raise HTTPException(status_code=500, detail=str(e))
     
+    @app.delete("/episodes/{episode_id}", response_model=SuccessResponse)
+    async def delete_episode(
+        episode_id: str,
+        delete_files: bool = Query(True, description="Delete all generated files"),
+        orchestrator = Depends(get_orchestrator)
+    ):
+        """
+        Delete an episode and optionally all its generated files
+        
+        This will:
+        - Remove episode from database
+        - Delete transcripts (txt, vtt)
+        - Delete enrichment data (json)
+        - Delete rendered HTML and metadata
+        - Delete clips and variants
+        - Delete social media packages
+        - Delete audio files
+        - Optionally keep or delete source video
+        """
+        try:
+            from pathlib import Path
+            import shutil
+            
+            logger.info(f"Deleting episode: {episode_id}", delete_files=delete_files)
+            
+            # Get episode info before deletion
+            episode = orchestrator.registry.get_episode(episode_id)
+            if not episode:
+                raise HTTPException(status_code=404, detail=f"Episode not found: {episode_id}")
+            
+            deleted_files = []
+            errors = []
+            
+            if delete_files:
+                # Delete transcripts
+                transcript_paths = [
+                    Path(f"data/transcripts/txt/{episode_id}.txt"),
+                    Path(f"data/transcripts/vtt/{episode_id}.vtt"),
+                    Path(f"data/transcripts/{episode_id}.txt"),
+                    Path(f"data/transcripts/{episode_id}.vtt"),
+                ]
+                
+                for path in transcript_paths:
+                    if path.exists():
+                        try:
+                            path.unlink()
+                            deleted_files.append(str(path))
+                            logger.debug(f"Deleted transcript: {path}")
+                        except Exception as e:
+                            errors.append(f"Failed to delete {path}: {e}")
+                
+                # Delete enrichment data
+                enrichment_path = Path(f"data/enriched/{episode_id}.json")
+                if enrichment_path.exists():
+                    try:
+                        enrichment_path.unlink()
+                        deleted_files.append(str(enrichment_path))
+                        logger.debug(f"Deleted enrichment: {enrichment_path}")
+                    except Exception as e:
+                        errors.append(f"Failed to delete {enrichment_path}: {e}")
+                
+                # Delete audio file
+                audio_path = Path(f"data/audio/{episode_id}.wav")
+                if audio_path.exists():
+                    try:
+                        audio_path.unlink()
+                        deleted_files.append(str(audio_path))
+                        logger.debug(f"Deleted audio: {audio_path}")
+                    except Exception as e:
+                        errors.append(f"Failed to delete {audio_path}: {e}")
+                
+                # Delete rendered HTML and metadata
+                if episode.metadata:
+                    show_slug = episode.get_show_slug()
+                    html_paths = [
+                        Path(f"data/public/shows/{show_slug}/{episode_id}"),
+                        Path(f"data/public/{show_slug}/{episode_id}"),
+                        Path(f"data/public/meta/{episode_id}.json"),
+                    ]
+                    
+                    for path in html_paths:
+                        if path.exists():
+                            try:
+                                if path.is_dir():
+                                    shutil.rmtree(path)
+                                else:
+                                    path.unlink()
+                                deleted_files.append(str(path))
+                                logger.debug(f"Deleted rendered output: {path}")
+                            except Exception as e:
+                                errors.append(f"Failed to delete {path}: {e}")
+                
+                # Delete clips
+                clip_paths = [
+                    Path(f"data/clips/{episode_id}"),
+                    Path(f"data/outputs/{episode_id}/clips"),
+                ]
+                
+                # Also check organized structure
+                show_name = episode.get_show_name()
+                if show_name and show_name != 'Unknown':
+                    from .naming_service import get_naming_service
+                    naming_service = get_naming_service()
+                    try:
+                        episode_folder = naming_service.get_episode_folder_path(
+                            episode_id=episode_id,
+                            show_name=show_name,
+                            date=episode.created_at
+                        )
+                        clip_paths.append(episode_folder / "clips")
+                    except Exception:
+                        pass
+                
+                for path in clip_paths:
+                    if path.exists():
+                        try:
+                            shutil.rmtree(path)
+                            deleted_files.append(str(path))
+                            logger.debug(f"Deleted clips: {path}")
+                        except Exception as e:
+                            errors.append(f"Failed to delete {path}: {e}")
+                
+                # Delete social media packages
+                social_path = Path(f"data/social_packages/{episode_id}")
+                if social_path.exists():
+                    try:
+                        shutil.rmtree(social_path)
+                        deleted_files.append(str(social_path))
+                        logger.debug(f"Deleted social packages: {social_path}")
+                    except Exception as e:
+                        errors.append(f"Failed to delete {social_path}: {e}")
+                
+                # Delete temp files
+                temp_paths = [
+                    Path(f"data/temp/{episode_id}"),
+                    Path(f"data/temp/uploaded/{episode_id}"),
+                ]
+                
+                for path in temp_paths:
+                    if path.exists():
+                        try:
+                            if path.is_dir():
+                                shutil.rmtree(path)
+                            else:
+                                path.unlink()
+                            deleted_files.append(str(path))
+                            logger.debug(f"Deleted temp files: {path}")
+                        except Exception as e:
+                            errors.append(f"Failed to delete {path}: {e}")
+            
+            # Delete from database
+            try:
+                orchestrator.registry.delete_episode(episode_id)
+                logger.info(f"Episode deleted from database: {episode_id}")
+            except Exception as e:
+                errors.append(f"Failed to delete from database: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to delete episode from database: {e}")
+            
+            return SuccessResponse(
+                message=f"Episode {episode_id} deleted successfully",
+                data={
+                    "episode_id": episode_id,
+                    "files_deleted": len(deleted_files),
+                    "deleted_files": deleted_files[:10],  # Show first 10 files
+                    "errors": errors if errors else None
+                }
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error deleting episode: {e}", episode_id=episode_id, exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
+    
     @app.post("/episodes/discover", response_model=Dict[str, Any])
     async def discover_episodes(orchestrator = Depends(get_orchestrator)):
         """Discover new video episodes from configured source directories"""
@@ -304,7 +483,7 @@ def register_endpoints(app: FastAPI):
                 discovered.append({
                     "episode_id": episode.episode_id,
                     "source_path": episode.source.path,
-                    "show": episode.metadata.show_name,
+                    "show": episode.get_show_name(),
                     "title": episode.metadata.title
                 })
             

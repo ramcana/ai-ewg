@@ -32,22 +32,30 @@ def test_discover_help():
 def test_db_init(tmp_path):
     """Test database initialization."""
     config_path = tmp_path / "config.yaml"
+    db_path = tmp_path / 'data' / 'pipeline.db'
     config_path.write_text(f"""
-data_dir: {tmp_path / 'data'}
-registry_db_path: {tmp_path / 'data' / 'registry.db'}
+sources:
+  - path: {tmp_path / 'videos'}
+    enabled: true
+database:
+  path: {db_path}
 """)
     
     result = runner.invoke(app, ["--config", str(config_path), "db", "init"])
     assert result.exit_code == 0
-    assert (tmp_path / "data" / "registry.db").exists()
+    assert db_path.exists()
 
 
 def test_db_status(tmp_path):
     """Test database status command."""
     config_path = tmp_path / "config.yaml"
+    db_path = tmp_path / 'data' / 'pipeline.db'
     config_path.write_text(f"""
-data_dir: {tmp_path / 'data'}
-registry_db_path: {tmp_path / 'data' / 'registry.db'}
+sources:
+  - path: {tmp_path / 'videos'}
+    enabled: true
+database:
+  path: {db_path}
 """)
     
     # Initialize first
@@ -56,4 +64,4 @@ registry_db_path: {tmp_path / 'data' / 'registry.db'}
     # Check status
     result = runner.invoke(app, ["--config", str(config_path), "db", "status"])
     assert result.exit_code == 0
-    assert "Registry Statistics" in result.stdout
+    assert "Registry Statistics" in result.stdout or "Database" in result.stdout

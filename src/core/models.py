@@ -12,6 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass, field, asdict
+import uuid
 
 
 class ProcessingStage(Enum):
@@ -21,6 +22,14 @@ class ProcessingStage(Enum):
     TRANSCRIBED = "transcribed"
     ENRICHED = "enriched"
     RENDERED = "rendered"
+    CLIPS_DISCOVERED = "clips_discovered"
+
+
+class ClipStatus(Enum):
+    """Status of clip processing"""
+    PENDING = "pending"
+    RENDERED = "rendered"
+    FAILED = "failed"
 
 
 @dataclass
@@ -30,6 +39,24 @@ class SourceInfo:
     file_size: int
     last_modified: datetime
     source_type: str = "local"  # local, unc, external
+    
+    def get_absolute_path(self) -> Path:
+        """
+        Get absolute path to source file, resolving relative paths from project root
+        
+        Returns:
+            Path: Absolute path to source file
+        """
+        path_obj = Path(self.path)
+        
+        # If already absolute, return as-is
+        if path_obj.is_absolute():
+            return path_obj
+        
+        # Resolve relative path from project root
+        # Project root is where models.py is located: src/core/models.py -> 2 levels up
+        project_root = Path(__file__).parent.parent.parent.resolve()
+        return (project_root / path_obj).resolve()
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -105,36 +132,69 @@ class EpisodeMetadata:
 
 @dataclass
 class TranscriptionResult:
-    """Result of transcription processing"""
+    """Result of transcription processing with multilingual support"""
     text: str
     vtt_content: str
     segments: List[Dict[str, Any]] = field(default_factory=list)
     confidence: float = 0.0
     language: str = "en"
     model_used: str = "base"
+    words: List[Dict[str, Any]] = field(default_factory=list)  # Word-level timestamps for clip generation
+    diarization: Optional[Dict[str, Any]] = None  # Speaker diarization data
+    
+    # Multilingual support fields
+    detected_language: Optional[str] = None  # Language detected by Whisper
+    original_language: Optional[str] = None  # Raw Whisper language detection
+    task_performed: str = "transcribe"  # "transcribe" or "translate"
+    translated_to_english: bool = False  # True if content was translated to English
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'TranscriptionResult':
-        return cls(**data)
+        # Remove legacy fields that are no longer in the model
+        legacy_fields = ['word_count', 'duration', 'speaker_count']
+        cleaned_data = {k: v for k, v in data.items() if k not in legacy_fields}
+        return cls(**cleaned_data)
 
 
 @dataclass
 class EnrichmentResult:
     """Result of AI enrichment processing"""
+    # Intelligence Chain V2 results
     diarization: Optional[Dict[str, Any]] = None
     entities: Optional[Dict[str, Any]] = None
     disambiguation: Optional[Dict[str, Any]] = None
     proficiency_scores: Optional[Dict[str, Any]] = None
+    
+    # AI-extracted metadata
+    show_name: Optional[str] = None
+    host_name: Optional[str] = None
+    episode_number: Optional[str] = None
+    
+    # AI analysis
+    executive_summary: Optional[str] = None
+    key_takeaways: List[str] = field(default_factory=list)
+    deep_analysis: Optional[str] = None
+    topics: List[str] = field(default_factory=list)
+    segment_titles: List[str] = field(default_factory=list)
+    
+    # Summary for display
+    summary: Optional[str] = None
+    description: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    
+    # Guest information
+    enriched_guests: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'EnrichmentResult':
-        return cls(**data)
+        # Handle legacy data that might not have all fields
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
 @dataclass
@@ -231,6 +291,65 @@ class EpisodeObject:
         """Clear error messages"""
         self.errors = None
         self.updated_at = datetime.now()
+    
+    def get_show_name(self) -> str:
+        """
+        Get show name with fallback chain: metadata → enrichment → 'Unknown'
+        Use this instead of directly accessing episode.metadata.show_name
+        """
+        if self.metadata and self.metadata.show_name:
+            return self.metadata.show_name
+        elif self.enrichment:
+            # Handle both dict and EnrichmentResult object
+            if isinstance(self.enrichment, dict):
+                show_name = self.enrichment.get('show_name') or self.enrichment.get('show_name_extracted')
+                if show_name:
+                    return show_name
+            elif hasattr(self.enrichment, 'show_name') and self.enrichment.show_name:
+                return self.enrichment.show_name
+        return 'Unknown'
+    
+    def get_show_slug(self) -> str:
+        """
+        Get show slug with fallback chain: metadata → enrichment → generated from show_name
+        Use this instead of directly accessing episode.metadata.show_slug
+        """
+        if self.metadata and self.metadata.show_slug:
+            return self.metadata.show_slug
+        elif self.enrichment:
+            # Handle both dict and EnrichmentResult object
+            show_name = None
+            if isinstance(self.enrichment, dict):
+                show_name = self.enrichment.get('show_name') or self.enrichment.get('show_name_extracted')
+            elif hasattr(self.enrichment, 'show_name'):
+                show_name = self.enrichment.show_name
+            
+            if show_name:
+                # Generate slug from enrichment show_name
+                return show_name.lower().replace(' ', '-').replace('_', '-')
+        
+        # Fallback to generating from metadata show_name
+        if self.metadata and self.metadata.show_name:
+            return self.metadata.show_name.lower().replace(' ', '-').replace('_', '-')
+        
+        return 'unknown'
+    
+    def get_host_name(self) -> Optional[str]:
+        """
+        Get host name with fallback chain: metadata → enrichment → None
+        Use this instead of directly accessing episode.metadata.host
+        """
+        if self.metadata and hasattr(self.metadata, 'host') and self.metadata.host:
+            return self.metadata.host
+        elif self.enrichment:
+            # Handle both dict and EnrichmentResult object
+            if isinstance(self.enrichment, dict):
+                host_name = self.enrichment.get('host_name') or self.enrichment.get('host_name_extracted')
+                if host_name:
+                    return host_name
+            elif hasattr(self.enrichment, 'host_name') and self.enrichment.host_name:
+                return self.enrichment.host_name
+        return None
 
 
 @dataclass
@@ -319,6 +438,153 @@ class ContentHasher:
         )
         
         return hashlib.sha256(hash_input.encode()).hexdigest()
+
+
+@dataclass
+class ClipObject:
+    """Clip discovered from an episode with metadata"""
+    id: str
+    episode_id: str
+    start_ms: int
+    end_ms: int
+    duration_ms: int
+    score: float
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    hashtags: List[str] = field(default_factory=list)
+    status: ClipStatus = ClipStatus.PENDING
+    created_at: Optional[datetime] = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        
+        # Validate data
+        if self.start_ms < 0:
+            raise ValueError("start_ms must be non-negative")
+        if self.end_ms <= self.start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        if self.duration_ms != (self.end_ms - self.start_ms):
+            raise ValueError("duration_ms must equal (end_ms - start_ms)")
+        if not 0.0 <= self.score <= 1.0:
+            raise ValueError("score must be between 0.0 and 1.0")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage"""
+        return {
+            'id': self.id,
+            'episode_id': self.episode_id,
+            'start_ms': self.start_ms,
+            'end_ms': self.end_ms,
+            'duration_ms': self.duration_ms,
+            'score': self.score,
+            'title': self.title,
+            'caption': self.caption,
+            'hashtags': self.hashtags,
+            'status': self.status.value,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ClipObject':
+        """Create from dictionary (database retrieval)"""
+        return cls(
+            id=data['id'],
+            episode_id=data['episode_id'],
+            start_ms=data['start_ms'],
+            end_ms=data['end_ms'],
+            duration_ms=data['duration_ms'],
+            score=data['score'],
+            title=data.get('title'),
+            caption=data.get('caption'),
+            hashtags=data.get('hashtags', []),
+            status=ClipStatus(data.get('status', 'pending')),
+            created_at=datetime.fromisoformat(data['created_at']) if data.get('created_at') else None
+        )
+    
+    @classmethod
+    def create_clip(cls, episode_id: str, start_ms: int, end_ms: int, score: float,
+                   title: Optional[str] = None, caption: Optional[str] = None,
+                   hashtags: Optional[List[str]] = None) -> 'ClipObject':
+        """Factory method to create a new clip with generated ID"""
+        clip_id = f"clip_{uuid.uuid4().hex[:12]}"
+        duration_ms = end_ms - start_ms
+        
+        return cls(
+            id=clip_id,
+            episode_id=episode_id,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            duration_ms=duration_ms,
+            score=score,
+            title=title,
+            caption=caption,
+            hashtags=hashtags or []
+        )
+
+
+@dataclass
+class ClipAsset:
+    """Generated clip asset file"""
+    id: str
+    clip_id: str
+    path: str
+    variant: str  # 'clean' or 'subtitled'
+    aspect_ratio: str  # '9x16', '16x9', '1x1'
+    size_bytes: Optional[int] = None
+    created_at: Optional[datetime] = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        
+        # Validate variant
+        if self.variant not in ['clean', 'subtitled']:
+            raise ValueError("variant must be 'clean' or 'subtitled'")
+        
+        # Validate aspect ratio
+        if self.aspect_ratio not in ['9x16', '16x9', '1x1']:
+            raise ValueError("aspect_ratio must be '9x16', '16x9', or '1x1'")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage"""
+        return {
+            'id': self.id,
+            'clip_id': self.clip_id,
+            'path': self.path,
+            'variant': self.variant,
+            'aspect_ratio': self.aspect_ratio,
+            'size_bytes': self.size_bytes,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ClipAsset':
+        """Create from dictionary (database retrieval)"""
+        return cls(
+            id=data['id'],
+            clip_id=data['clip_id'],
+            path=data['path'],
+            variant=data['variant'],
+            aspect_ratio=data['aspect_ratio'],
+            size_bytes=data.get('size_bytes'),
+            created_at=datetime.fromisoformat(data['created_at']) if data.get('created_at') else None
+        )
+    
+    @classmethod
+    def create_asset(cls, clip_id: str, path: str, variant: str, aspect_ratio: str,
+                    size_bytes: Optional[int] = None) -> 'ClipAsset':
+        """Factory method to create a new clip asset with generated ID"""
+        asset_id = f"asset_{uuid.uuid4().hex[:12]}"
+        
+        return cls(
+            id=asset_id,
+            clip_id=clip_id,
+            path=path,
+            variant=variant,
+            aspect_ratio=aspect_ratio,
+            size_bytes=size_bytes
+        )
 
 
 # Utility functions for working with models

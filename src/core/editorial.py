@@ -332,7 +332,7 @@ class EditorialLayer:
                         similarity_score += guest_overlap * 0.5
                 
                 # Check same show
-                if (episode.metadata.show_slug == other_episode.metadata.show_slug):
+                if (episode.get_show_slug() == other_episode.get_show_slug()):
                     similarity_score += 0.2
                 
                 # Add if similarity threshold met
@@ -1124,8 +1124,9 @@ class EditorialSEOOptimizer:
         keywords.extend(topic_tags[:5])
         
         # Add show name
-        if episode.metadata.show_name:
-            keywords.append(episode.metadata.show_name)
+        show_name = episode.get_show_name()
+        if show_name and show_name != 'Unknown':
+            keywords.append(show_name)
         
         # Add guest names (if high-profile)
         if episode.enrichment and episode.enrichment.proficiency_scores:
@@ -1157,7 +1158,7 @@ class EditorialSEOOptimizer:
             "description": editorial_content.summary,
             "partOfSeries": {
                 "@type": "TVSeries",
-                "name": episode.metadata.show_name
+                "name": episode.get_show_name()
             }
         }
         

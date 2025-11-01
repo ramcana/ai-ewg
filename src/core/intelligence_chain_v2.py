@@ -14,6 +14,7 @@ import asyncio
 import hashlib
 import json
 import os
+import sys
 import tempfile
 import uuid
 from datetime import datetime
@@ -247,7 +248,7 @@ class IntelligenceChainOrchestratorV2:
             
             # Build command
             cmd = [
-                "python", str(self.utils_dir / "diarize.py"),
+                sys.executable, str(self.utils_dir / "diarize.py"),
                 "--audio", audio_path,
                 "--segments_out", str(segments_file),
                 "--device", self.config.models.diarization_device,
@@ -299,8 +300,9 @@ class IntelligenceChainOrchestratorV2:
                 f.write(transcript_text)
             
             # Build command (try LLM first)
+            # Use sys.executable to ensure we use the same Python interpreter (venv)
             cmd = [
-                "python", str(self.utils_dir / "extract_entities.py"),
+                sys.executable, str(self.utils_dir / "extract_entities.py"),
                 "--transcript", str(transcript_file),
                 "--output", str(entities_file),
                 "--method", "llm",
@@ -322,7 +324,7 @@ class IntelligenceChainOrchestratorV2:
                 self.logger.warning("LLM extraction failed, trying spaCy fallback")
                 
                 cmd = [
-                    "python", str(self.utils_dir / "extract_entities.py"),
+                    sys.executable, str(self.utils_dir / "extract_entities.py"),
                     "--transcript", str(transcript_file),
                     "--output", str(entities_file),
                     "--method", "spacy"
@@ -369,7 +371,7 @@ class IntelligenceChainOrchestratorV2:
             
             # Build command
             cmd = [
-                "python", str(self.utils_dir / "disambiguate.py"),
+                sys.executable, str(self.utils_dir / "disambiguate.py"),
                 "--candidates", str(candidates_file),
                 "--output", str(enriched_file),
                 "--min_confidence", str(self.config.thresholds.confidence_min),
@@ -420,7 +422,7 @@ class IntelligenceChainOrchestratorV2:
             
             # Build command
             cmd = [
-                "python", str(self.utils_dir / "score_people.py"),
+                sys.executable, str(self.utils_dir / "score_people.py"),
                 "--enriched", str(enriched_file),
                 "--output", str(scored_file)
             ]
