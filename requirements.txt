@@ -22,12 +22,15 @@ beautifulsoup4>=4.11.0
 # System monitoring
 psutil>=5.9.0
 
+# Database support
+sqlalchemy>=1.4.0
+sqlmodel>=0.0.8
+
+# Video/Image processing
+opencv-python-headless>=4.7.0
+
 # Optional dependencies for full functionality
 # Uncomment as needed:
-
-# Database support
-# sqlalchemy>=1.4.0
-# sqlite3  # Built into Python
 
 # Image processing (for thumbnails)
 # Pillow>=9.0.0
