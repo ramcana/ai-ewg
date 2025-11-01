@@ -298,8 +298,8 @@ class WebArtifactGenerator:
     
     def _create_episode_folder(self, episode: EpisodeObject) -> Path:
         """Create organized folder structure for episode"""
-        # Create folder path: show/season/episode_id
-        folder_parts = [episode.metadata.show_slug]
+        # Create folder path: show/season/episode_id using helper method
+        folder_parts = [episode.get_show_slug()]
         
         if episode.metadata.season:
             folder_parts.append(f"season-{episode.metadata.season}")
@@ -385,8 +385,9 @@ class WebArtifactGenerator:
         keywords = []
         if episode.editorial and episode.editorial.topic_tags:
             keywords.extend(episode.editorial.topic_tags)
-        if episode.metadata.show_name:
-            keywords.append(episode.metadata.show_name)
+        show_name = episode.get_show_name()
+        if show_name and show_name != 'Unknown':
+            keywords.append(show_name)
         
         if keywords:
             tags.append(f'<meta name="keywords" content="{", ".join(keywords[:10])}">')
@@ -896,22 +897,11 @@ p {
     def _generate_header(self, episode: EpisodeObject) -> str:
         """Generate header section with show name, episode info, and host"""
         # Get show name (prefer AI-extracted, fallback to metadata)
-        # Handle both dict and EnrichmentResult object
-        if isinstance(episode.enrichment, dict):
-            enrichment = episode.enrichment
-            show_name = enrichment.get('show_name_extracted') or enrichment.get('show_name') or episode.metadata.show_name or "Episode"
-            host_name = enrichment.get('host_name_extracted') or enrichment.get('host_name', '')
-            # Also check ai_analysis section
-            ai_analysis = enrichment.get('ai_analysis', {})
-            if not host_name:
-                host_name = ai_analysis.get('host_name', '')
-        elif episode.enrichment:
-            # EnrichmentResult object
-            show_name = episode.enrichment.show_name or episode.metadata.show_name or "Episode"
-            host_name = episode.enrichment.host_name or ''
-        else:
-            show_name = episode.metadata.show_name or "Episode"
-            host_name = ''
+        # Use helper methods for backward compatibility
+        show_name = episode.get_show_name()
+        if show_name == 'Unknown':
+            show_name = "Episode"
+        host_name = episode.get_host_name() or ''
         
         title = self._get_episode_title(episode)
         
@@ -1314,8 +1304,8 @@ document.addEventListener('DOMContentLoaded', function() {
         export_data["episode"] = {
             "title": self._get_episode_title(episode),
             "description": self._get_episode_description(episode),
-            "show_name": episode.metadata.show_name,
-            "show_slug": episode.metadata.show_slug,
+            "show_name": episode.get_show_name(),
+            "show_slug": episode.get_show_slug(),
             "season": episode.metadata.season,
             "episode_number": episode.metadata.episode,
             "date": episode.metadata.date,
@@ -1411,11 +1401,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     def _add_series_info_to_schema(self, schema: Dict[str, Any], episode: EpisodeObject) -> None:
         """Add TV series information to schema"""
-        if episode.metadata.show_name:
+        show_name = episode.get_show_name()
+        if show_name and show_name != 'Unknown':
             schema["partOfSeries"] = {
                 "@type": "TVSeries",
-                "name": episode.metadata.show_name,
-                "identifier": episode.metadata.show_slug
+                "name": show_name,
+                "identifier": episode.get_show_slug()
             }
     
     def _add_person_info_to_schema(self, schema: Dict[str, Any], episode: EpisodeObject) -> None:
@@ -1461,10 +1452,11 @@ document.addEventListener('DOMContentLoaded', function() {
     def _add_organization_info_to_schema(self, schema: Dict[str, Any], episode: EpisodeObject) -> None:
         """Add organization information to schema"""
         # This could be expanded to include production companies, networks, etc.
-        if episode.metadata.show_name:
+        show_name = episode.get_show_name()
+        if show_name and show_name != 'Unknown':
             schema["productionCompany"] = {
                 "@type": "Organization",
-                "name": episode.metadata.show_name
+                "name": show_name
             }
     
     def _add_content_info_to_schema(self, schema: Dict[str, Any], episode: EpisodeObject) -> None:
@@ -1516,7 +1508,8 @@ document.addEventListener('DOMContentLoaded', function() {
         elif episode.editorial and episode.editorial.key_takeaway:
             return episode.editorial.key_takeaway
         elif episode.metadata.topic:
-            return f"{episode.metadata.show_name or 'Episode'}: {episode.metadata.topic}"
+            show_name = episode.get_show_name()
+            return f"{show_name if show_name != 'Unknown' else 'Episode'}: {episode.metadata.topic}"
         else:
             return episode.episode_id
     
@@ -1536,8 +1529,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if not self.base_url:
             return ""
         
-        # Build URL path
-        path_parts = [episode.metadata.show_slug]
+        # Build URL path using helper method
+        path_parts = [episode.get_show_slug()]
         if episode.metadata.season:
             path_parts.append(f"season-{episode.metadata.season}")
         path_parts.append(episode.episode_id)

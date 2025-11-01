@@ -145,7 +145,7 @@ class MetadataExporter:
     def _create_episode_folder(self, episode: EpisodeObject, base_dir: Path) -> Path:
         """Create organized folder structure for episode files"""
         # Create folder structure: show/season/episode_id/
-        show_slug = episode.metadata.show_slug
+        show_slug = episode.get_show_slug()
         season = episode.metadata.season or "unknown"
         
         episode_dir = base_dir / show_slug / f"season_{season}" / episode.episode_id
@@ -401,13 +401,13 @@ class MetadataExporter:
         hosts_data = {}
         
         for episode in episodes:
-            show_slug = episode.metadata.show_slug
+            show_slug = episode.get_show_slug()
             season = episode.metadata.season or 0
             
             # Initialize show data
             if show_slug not in shows_data:
                 shows_data[show_slug] = {
-                    'show_name': episode.metadata.show_name,
+                    'show_name': episode.get_show_name(),
                     'show_slug': show_slug,
                     'seasons': {},
                     'total_episodes': 0
@@ -457,7 +457,7 @@ class MetadataExporter:
                             
                             appearance = {
                                 'episode_id': episode.episode_id,
-                                'show_name': episode.metadata.show_name,
+                                'show_name': episode.get_show_name(),
                                 'show_slug': show_slug,
                                 'date': episode.metadata.date,
                                 'title': episode.metadata.title or episode.metadata.topic,

@@ -93,8 +93,8 @@ class RenderingStageProcessor:
                 has_ai_analysis='ai_analysis' in enrichment_json
             )
             
-            # Create episode directory
-            show_slug = episode.metadata.show_slug
+            # Create episode directory using helper method for backward compatibility
+            show_slug = episode.get_show_slug()
             episode_dir = self.shows_dir / show_slug / episode.episode_id
             episode_dir.mkdir(parents=True, exist_ok=True)
             
@@ -178,12 +178,15 @@ class RenderingStageProcessor:
         key_takeaway = summary_data.get('key_takeaway', '')
         description = summary_data.get('description', episode.metadata.description or '')
         
+        # Use helper methods for show name with fallback
+        show_name = episode.get_show_name()
+        
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{episode.metadata.title} | {episode.metadata.show_name}</title>
+    <title>{episode.metadata.title} | {show_name}</title>
     <meta name="description" content="{description}">
     <style>
         body {{
@@ -274,7 +277,7 @@ class RenderingStageProcessor:
 <body>
     <div class="container">
         <div class="header">
-            <div class="show-name">{episode.metadata.show_name}</div>
+            <div class="show-name">{show_name}</div>
             <h1>{episode.metadata.title}</h1>
             <div class="date">{episode.metadata.date or 'Date not available'}</div>
         </div>

@@ -1086,14 +1086,32 @@ class PipelineOrchestrator:
             # Convert to dict format for API response
             result = []
             for ep in episodes:
+                # Get show_name from metadata first, then fall back to enrichment
+                show_name = None
+                if ep.metadata and ep.metadata.show_name:
+                    show_name = ep.metadata.show_name
+                elif ep.enrichment and ep.enrichment.show_name:
+                    show_name = ep.enrichment.show_name
+                else:
+                    show_name = 'Unknown'
+                
+                # Get title from metadata or enrichment
+                title = None
+                if ep.metadata and ep.metadata.title:
+                    title = ep.metadata.title
+                elif ep.enrichment and hasattr(ep.enrichment, 'summary'):
+                    title = ep.enrichment.summary
+                else:
+                    title = ep.episode_id
+                
                 episode_dict = {
                     'episode_id': ep.episode_id,
                     'stage': ep.processing_stage.value if ep.processing_stage else 'unknown',
                     'source_path': ep.source.path if ep.source else '',
                     'file_size': ep.source.file_size if ep.source else 0,
-                    'show_name': ep.metadata.show_name if ep.metadata else 'Unknown',
-                    'title': ep.metadata.title if ep.metadata else ep.episode_id,
-                    'show': ep.metadata.show_name if ep.metadata else None,
+                    'show_name': show_name,
+                    'title': title,
+                    'show': show_name,  # Use same show_name for 'show' field
                     'duration': ep.media.duration_seconds if ep.media else 0,
                     'created_at': ep.created_at.isoformat() if ep.created_at else None,
                     'updated_at': ep.updated_at.isoformat() if ep.updated_at else None,

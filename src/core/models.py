@@ -291,6 +291,65 @@ class EpisodeObject:
         """Clear error messages"""
         self.errors = None
         self.updated_at = datetime.now()
+    
+    def get_show_name(self) -> str:
+        """
+        Get show name with fallback chain: metadata → enrichment → 'Unknown'
+        Use this instead of directly accessing episode.metadata.show_name
+        """
+        if self.metadata and self.metadata.show_name:
+            return self.metadata.show_name
+        elif self.enrichment:
+            # Handle both dict and EnrichmentResult object
+            if isinstance(self.enrichment, dict):
+                show_name = self.enrichment.get('show_name') or self.enrichment.get('show_name_extracted')
+                if show_name:
+                    return show_name
+            elif hasattr(self.enrichment, 'show_name') and self.enrichment.show_name:
+                return self.enrichment.show_name
+        return 'Unknown'
+    
+    def get_show_slug(self) -> str:
+        """
+        Get show slug with fallback chain: metadata → enrichment → generated from show_name
+        Use this instead of directly accessing episode.metadata.show_slug
+        """
+        if self.metadata and self.metadata.show_slug:
+            return self.metadata.show_slug
+        elif self.enrichment:
+            # Handle both dict and EnrichmentResult object
+            show_name = None
+            if isinstance(self.enrichment, dict):
+                show_name = self.enrichment.get('show_name') or self.enrichment.get('show_name_extracted')
+            elif hasattr(self.enrichment, 'show_name'):
+                show_name = self.enrichment.show_name
+            
+            if show_name:
+                # Generate slug from enrichment show_name
+                return show_name.lower().replace(' ', '-').replace('_', '-')
+        
+        # Fallback to generating from metadata show_name
+        if self.metadata and self.metadata.show_name:
+            return self.metadata.show_name.lower().replace(' ', '-').replace('_', '-')
+        
+        return 'unknown'
+    
+    def get_host_name(self) -> Optional[str]:
+        """
+        Get host name with fallback chain: metadata → enrichment → None
+        Use this instead of directly accessing episode.metadata.host
+        """
+        if self.metadata and hasattr(self.metadata, 'host') and self.metadata.host:
+            return self.metadata.host
+        elif self.enrichment:
+            # Handle both dict and EnrichmentResult object
+            if isinstance(self.enrichment, dict):
+                host_name = self.enrichment.get('host_name') or self.enrichment.get('host_name_extracted')
+                if host_name:
+                    return host_name
+            elif hasattr(self.enrichment, 'host_name') and self.enrichment.host_name:
+                return self.enrichment.host_name
+        return None
 
 
 @dataclass

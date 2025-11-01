@@ -72,13 +72,13 @@ class PipelineApiClient:
     and clip generation with built-in retry logic, caching, and error handling.
     """
     
-    def __init__(self, base_url: str = "http://localhost:8000", timeout: int = 600, enable_cache: bool = True):
+    def __init__(self, base_url: str = "http://localhost:8000", timeout: int = 3600, enable_cache: bool = True):
         """
         Initialize API client
         
         Args:
             base_url: Base URL for the API (default: http://localhost:8000)
-            timeout: Request timeout in seconds (default: 600 for long-running processes)
+            timeout: Request timeout in seconds (default: 3600 = 1 hour for long-running processes)
             enable_cache: Enable response caching for performance (default: True)
         """
         self.base_url = base_url.rstrip('/')

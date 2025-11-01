@@ -98,7 +98,7 @@ class MetadataManager:
                     str(json_path),
                     file_size,
                     datetime.now().isoformat(),
-                    episode.metadata.show_name,
+                    episode.get_show_name(),
                     episode.metadata.title or episode.metadata.topic,
                     episode.metadata.date,
                     episode.media.duration_seconds,

@@ -59,8 +59,9 @@ def _extract_outputs(orchestrator, episode_id: str, stage) -> Optional[Dict[str,
         if not episode:
             return None
         
-        show_name = episode.metadata.show_name if episode.metadata else "unknown"
-        show_slug = episode.metadata.show_slug if episode.metadata else show_name.lower().replace(' ', '-')
+        # Use helper methods for backward compatibility
+        show_name = episode.get_show_name()
+        show_slug = episode.get_show_slug()
         
         # Try multiple possible HTML paths
         possible_paths = [
@@ -366,7 +367,7 @@ def register_endpoints(app: FastAPI):
                 
                 # Delete rendered HTML and metadata
                 if episode.metadata:
-                    show_slug = episode.metadata.show_slug or "unknown"
+                    show_slug = episode.get_show_slug()
                     html_paths = [
                         Path(f"data/public/shows/{show_slug}/{episode_id}"),
                         Path(f"data/public/{show_slug}/{episode_id}"),
@@ -392,13 +393,14 @@ def register_endpoints(app: FastAPI):
                 ]
                 
                 # Also check organized structure
-                if episode.metadata and episode.metadata.show_name:
+                show_name = episode.get_show_name()
+                if show_name and show_name != 'Unknown':
                     from .naming_service import get_naming_service
                     naming_service = get_naming_service()
                     try:
                         episode_folder = naming_service.get_episode_folder_path(
                             episode_id=episode_id,
-                            show_name=episode.metadata.show_name,
+                            show_name=show_name,
                             date=episode.created_at
                         )
                         clip_paths.append(episode_folder / "clips")
@@ -481,7 +483,7 @@ def register_endpoints(app: FastAPI):
                 discovered.append({
                     "episode_id": episode.episode_id,
                     "source_path": episode.source.path,
-                    "show": episode.metadata.show_name,
+                    "show": episode.get_show_name(),
                     "title": episode.metadata.title
                 })
             

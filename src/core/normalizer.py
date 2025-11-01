@@ -542,7 +542,7 @@ class EpisodeNormalizer:
         dates = []
         
         for episode in episodes:
-            show_name = episode.metadata.show_name
+            show_name = episode.get_show_name()
             if show_name not in shows:
                 shows[show_name] = {
                     'count': 0,
