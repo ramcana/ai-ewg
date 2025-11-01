@@ -36,6 +36,7 @@ output/
 
 # Test Data (see docs/setup/TEST_DATA_GUIDE.md)
 test_videos/
+input_videos/
 
 # Tool-specific
 .kiro/
