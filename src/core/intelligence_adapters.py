@@ -43,20 +43,32 @@ def adapt_diarization_result(data: Dict[str, Any]) -> DiarizationResult:
 
 def adapt_entities_result(data: Dict[str, Any]) -> EntitiesResult:
     """Convert entity extraction JSON to typed model"""
-    candidates = [
-        EntityMention(
-            name=c['name'],
-            role_guess=c.get('role_guess'),
-            org_guess=c.get('org_guess'),
-            quotes=c.get('quotes', []),
-            confidence=c.get('confidence', 0.5),
-            journalistic_relevance=c.get('journalistic_relevance', 'medium'),
-            authority_indicators=c.get('authority_indicators', []),
-            context=c.get('context'),
-            editorial_confidence=c.get('editorial_confidence')
+    candidates = []
+    for c in data.get('candidates', []):
+        # Handle org_guess - AI sometimes returns list instead of string
+        org_guess = c.get('org_guess')
+        if isinstance(org_guess, list):
+            # Join multiple orgs with comma, or take first one
+            org_guess = org_guess[0] if org_guess else None
+        
+        # Handle role_guess - apply same logic for consistency
+        role_guess = c.get('role_guess')
+        if isinstance(role_guess, list):
+            role_guess = role_guess[0] if role_guess else None
+        
+        candidates.append(
+            EntityMention(
+                name=c['name'],
+                role_guess=role_guess,
+                org_guess=org_guess,
+                quotes=c.get('quotes', []),
+                confidence=c.get('confidence', 0.5),
+                journalistic_relevance=c.get('journalistic_relevance', 'medium'),
+                authority_indicators=c.get('authority_indicators', []),
+                context=c.get('context'),
+                editorial_confidence=c.get('editorial_confidence')
+            )
         )
-        for c in data.get('candidates', [])
-    ]
     
     # Parse journalistic focus if available
     journalistic_focus = None
@@ -130,19 +142,30 @@ def adapt_resolution_result(data: Dict[str, Any]) -> ResolutionResult:
         ))
     
     # Adapt original candidates
-    original_candidates = [
-        EntityMention(
-            name=c['name'],
-            role_guess=c.get('role_guess'),
-            org_guess=c.get('org_guess'),
-            quotes=c.get('quotes', []),
-            confidence=c.get('confidence', 0.5),
-            journalistic_relevance=c.get('journalistic_relevance', 'medium'),
-            authority_indicators=c.get('authority_indicators', []),
-            context=c.get('context')
+    original_candidates = []
+    for c in data.get('original_candidates', []):
+        # Handle org_guess - AI sometimes returns list instead of string
+        org_guess = c.get('org_guess')
+        if isinstance(org_guess, list):
+            org_guess = org_guess[0] if org_guess else None
+        
+        # Handle role_guess - apply same logic for consistency
+        role_guess = c.get('role_guess')
+        if isinstance(role_guess, list):
+            role_guess = role_guess[0] if role_guess else None
+        
+        original_candidates.append(
+            EntityMention(
+                name=c['name'],
+                role_guess=role_guess,
+                org_guess=org_guess,
+                quotes=c.get('quotes', []),
+                confidence=c.get('confidence', 0.5),
+                journalistic_relevance=c.get('journalistic_relevance', 'medium'),
+                authority_indicators=c.get('authority_indicators', []),
+                context=c.get('context')
+            )
         )
-        for c in data.get('original_candidates', [])
-    ]
     
     return ResolutionResult(
         enriched_people=enriched_people,

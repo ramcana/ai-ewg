@@ -265,6 +265,78 @@ class VideoProcessingInterface:
         """
         st.subheader("📁 Video Folder Selection")
         
+        # Show uploaded files that are already in temp folder
+        temp_upload_dir = Path("data/temp/uploaded")
+        if temp_upload_dir.exists():
+            uploaded_files = list(temp_upload_dir.glob("*.mp4")) + list(temp_upload_dir.glob("*.avi")) + \
+                           list(temp_upload_dir.glob("*.mov")) + list(temp_upload_dir.glob("*.mkv"))
+            
+            if uploaded_files:
+                with st.expander(f"📤 Previously Uploaded Files ({len(uploaded_files)})", expanded=True):
+                    st.write("**Files ready to process:**")
+                    
+                    for i, file in enumerate(uploaded_files):
+                        col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
+                        
+                        with col1:
+                            st.write(f"📹 **{file.name}**")
+                        
+                        with col2:
+                            file_size_mb = file.stat().st_size / (1024 * 1024)
+                            st.write(f"{file_size_mb:.1f} MB")
+                        
+                        with col3:
+                            if st.button("✅ Use", key=f"use_upload_{i}", width='stretch'):
+                                st.session_state['selected_upload_path'] = str(temp_upload_dir)
+                                st.success(f"Selected: {file.name}")
+                                st.rerun()
+                        
+                        with col4:
+                            if st.button("🗑️", key=f"delete_upload_{i}", width='stretch'):
+                                try:
+                                    file.unlink()
+                                    st.success(f"Deleted {file.name}")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+                    
+                    st.markdown("---")
+                    col_use_all, col_clear_all = st.columns(2)
+                    
+                    with col_use_all:
+                        if st.button("✅ Process All Uploaded Files", key="use_all_uploads", type="primary", width='stretch'):
+                            st.session_state['selected_upload_path'] = str(temp_upload_dir)
+                            st.success(f"Ready to process {len(uploaded_files)} files")
+                            st.rerun()
+                    
+                    with col_clear_all:
+                        if st.button("🗑️ Clear All Uploads", key="clear_all_uploads", width='stretch'):
+                            if st.session_state.get('confirm_clear_uploads'):
+                                for file in uploaded_files:
+                                    try:
+                                        file.unlink()
+                                    except:
+                                        pass
+                                st.success("All uploads cleared")
+                                st.session_state['confirm_clear_uploads'] = False
+                                st.rerun()
+                            else:
+                                st.session_state['confirm_clear_uploads'] = True
+                                st.warning("⚠️ Click again to confirm deletion")
+        
+        # Check if reprocessing a selected episode
+        reprocess_path = st.session_state.get('reprocess_source_path')
+        reprocess_id = st.session_state.get('reprocess_episode_id')
+        
+        if reprocess_path and reprocess_id:
+            st.info(f"🔄 **Reprocessing Episode:** {reprocess_id}")
+            st.write(f"**Source:** `{reprocess_path}`")
+            
+            if st.button("❌ Clear Reprocess Selection", key="clear_reprocess"):
+                del st.session_state['reprocess_source_path']
+                del st.session_state['reprocess_episode_id']
+                st.rerun()
+        
         # Add loading indicator for folder validation
         if 'folder_validation_loading' not in st.session_state:
             st.session_state.folder_validation_loading = False
@@ -278,7 +350,20 @@ class VideoProcessingInterface:
         
         folder_path = None
         
-        if input_method == "Text Input":
+        # Priority: 1) Uploaded files, 2) Reprocess path, 3) Manual input
+        selected_upload_path = st.session_state.get('selected_upload_path')
+        
+        if selected_upload_path:
+            folder_path = selected_upload_path
+            st.success(f"✅ Using uploaded files from: `{folder_path}`")
+            
+            if st.button("❌ Clear Upload Selection", key="clear_upload_selection"):
+                del st.session_state['selected_upload_path']
+                st.rerun()
+        elif reprocess_path:
+            folder_path = str(Path(reprocess_path).parent)
+            st.success(f"✅ Using source folder from selected episode: `{folder_path}`")
+        elif input_method == "Text Input":
             # Text input with validation
             folder_path = st.text_input(
                 "Folder Path:",
@@ -420,11 +505,17 @@ class VideoProcessingInterface:
         col1, col2 = st.columns(2)
         
         with col1:
+            # Auto-enable force_reprocess if user selected an episode to reprocess
+            default_force_reprocess = bool(st.session_state.get('reprocess_episode_id'))
+            
             force_reprocess = st.checkbox(
                 "Force Reprocess",
-                value=False,
-                help="Force reprocessing even if episodes are already processed (clears cache and forces fresh processing)"
+                value=default_force_reprocess,
+                help="Force reprocessing even if episodes are already processed (clears cache and forces fresh processing). Auto-enabled when reprocessing a selected episode."
             )
+            
+            if default_force_reprocess and force_reprocess:
+                st.info("✅ Force reprocess enabled - will regenerate all files")
             
             clear_cache_on_start = st.checkbox(
                 "Clear Cache on Start",
@@ -2290,6 +2381,65 @@ def render_video_processing_page():
                 if episodes:
                     st.write(f"**Total Episodes:** {len(episodes)}")
                     
+                    # Episode selection dropdown
+                    st.markdown("### 🎯 Select Episode to Reprocess")
+                    episode_options = {}
+                    for ep in episodes:
+                        episode_id = ep.get('episode_id', 'N/A')
+                        title = ep.get('title', 'Unknown')[:40]
+                        show = ep.get('show_name', 'Unknown')
+                        stage = ep.get('stage', 'N/A')
+                        status_icon = '✅' if stage == 'rendered' else '⚠️' if stage == 'failed' else '🔄'
+                        display_name = f"{status_icon} {show} - {title} ({stage})"
+                        episode_options[display_name] = episode_id
+                    
+                    selected_display = st.selectbox(
+                        "Choose an episode to reprocess or view details:",
+                        options=list(episode_options.keys()),
+                        key="reprocess_episode_select"
+                    )
+                    
+                    selected_episode_id = episode_options.get(selected_display)
+                    
+                    if selected_episode_id:
+                        # Show selected episode details
+                        selected_ep = next((ep for ep in episodes if ep.get('episode_id') == selected_episode_id), None)
+                        
+                        if selected_ep:
+                            col_info1, col_info2, col_info3 = st.columns(3)
+                            with col_info1:
+                                st.metric("Current Stage", selected_ep.get('stage', 'Unknown'))
+                            with col_info2:
+                                st.metric("Show", selected_ep.get('show_name', 'Unknown'))
+                            with col_info3:
+                                source_path = selected_ep.get('source_path', 'N/A')
+                                st.metric("Source", source_path.split('\\')[-1] if source_path != 'N/A' else 'N/A')
+                            
+                            # Reprocess button
+                            st.markdown("---")
+                            col_reprocess, col_view = st.columns(2)
+                            
+                            with col_reprocess:
+                                if st.button("🔄 Reprocess This Episode", key="reprocess_selected", type="primary", width='stretch'):
+                                    # Set the source path in session state for the processing interface
+                                    if selected_ep.get('source_path'):
+                                        st.session_state['reprocess_episode_id'] = selected_episode_id
+                                        st.session_state['reprocess_source_path'] = selected_ep.get('source_path')
+                                        st.success(f"✅ Ready to reprocess: {selected_episode_id}")
+                                        st.info("👇 Configure processing options below and click 'Start Processing'")
+                                    else:
+                                        st.error("❌ Source path not found for this episode")
+                            
+                            with col_view:
+                                if st.button("📁 View Episode Details", key="view_selected", width='stretch'):
+                                    st.session_state['current_page'] = 'View Outputs'
+                                    st.session_state['selected_episode_id'] = selected_episode_id
+                                    st.rerun()
+                    
+                    # Show all episodes table
+                    st.markdown("---")
+                    st.markdown("### 📋 All Episodes")
+                    
                     # Create a simple table
                     import pandas as pd
                     
@@ -2305,7 +2455,7 @@ def render_video_processing_page():
                     
                     df = pd.DataFrame(table_data)
                     
-                    # Display with selection
+                    # Display table
                     st.dataframe(df, width='stretch', hide_index=True)
                     
                     # Quick actions

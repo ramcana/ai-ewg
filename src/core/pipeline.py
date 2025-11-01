@@ -877,6 +877,28 @@ class PipelineOrchestrator:
                 elif grandparent_folder and grandparent_folder != "temp":
                     show_name = grandparent_folder
                 
+                # For uploaded files, try to extract show name from filename prefix
+                # Examples: FDW_09.24.25.mp4 → FDW, FD1314_10-27-25.mp4 → FD
+                if not show_name and parent_folder == "uploaded":
+                    prefix_match = re.match(r'^([A-Z]{2,4})[\d_-]', filename, re.IGNORECASE)
+                    if prefix_match:
+                        prefix = prefix_match.group(1).upper()
+                        # Map common prefixes to show names
+                        prefix_mapping = {
+                            'FD': 'Forum Daily News',
+                            'FDW': 'Forum Daily Week',
+                            'BB': 'Boom and Bust',
+                            'CP': 'Community Profile',
+                            'EP': 'Economic Pulse',
+                            'FF': 'Freedom Forum',
+                            'MG': 'My Generation',
+                            'CJ': 'Canadian Justice',
+                            'CI': 'Canadian Innovators',
+                            'LS': 'The LeDrew Show'
+                        }
+                        show_name = prefix_mapping.get(prefix, prefix)
+                        self.logger.info(f"Extracted show name from filename prefix: {prefix} -> {show_name}")
+                
                 # Try to extract episode number from filename
                 episode_number = None
                 match = re.search(r'(?:FD|EP|E)?(\d{3,4})', filename, re.IGNORECASE)

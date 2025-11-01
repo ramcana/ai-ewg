@@ -47,8 +47,18 @@ def get_default_mappings() -> Dict[str, str]:
         "forum daily news": "ForumDailyNews",
         "daily news": "ForumDailyNews",
         
+        "forum daily week": "ForumDailyWeek",
+        "daily week": "ForumDailyWeek",
+        "fdw": "ForumDailyWeek",
+        
         "boom and bust": "BoomAndBust",
         "boom & bust": "BoomAndBust",
+        
+        "community profile": "CommunityProfile",
+        
+        "economic pulse": "EconomicPulse",
+        
+        "freedom forum": "FreedomForum",
         
         "canadian justice": "CanadianJustice",
         
@@ -222,7 +232,10 @@ def render_add_new_show(mappings: Dict[str, str]):
                 
                 if save_show_mappings(mappings):
                     st.success(f"✅ Added show: {folder_name}")
-                    st.info(f"Mappings added: {len([ai_name] + aliases_text.split('\n'))}")
+                    # Calculate count outside f-string to avoid backslash issue
+                    alias_list = aliases_text.split('\n') if aliases_text else []
+                    total_mappings = len([ai_name] + alias_list)
+                    st.info(f"Mappings added: {total_mappings}")
                     st.rerun()
 
 

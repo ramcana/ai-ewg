@@ -551,7 +551,8 @@ class PipelineApiClient:
         aspect_ratios: Optional[List[str]] = None,
         score_threshold: Optional[float] = None,
         status_filter: Optional[str] = None,
-        force_rerender: bool = False
+        force_rerender: bool = False,
+        intelligent_crop: Optional[Dict[str, Any]] = None
     ) -> ApiResponse:
         """
         Render multiple clips for an episode in batch
@@ -564,6 +565,7 @@ class PipelineApiClient:
             score_threshold: Minimum score threshold for clips
             status_filter: Filter clips by status
             force_rerender: Force re-rendering even if assets exist
+            intelligent_crop: Intelligent crop settings (optional)
             
         Returns:
             ApiResponse: Bulk render results
@@ -585,6 +587,8 @@ class PipelineApiClient:
             data["score_threshold"] = score_threshold
         if status_filter:
             data["status_filter"] = status_filter
+        if intelligent_crop:
+            data["intelligent_crop"] = intelligent_crop
         
         return self._make_request('POST', f'/episodes/{episode_id}/render_clips', data=data)
     

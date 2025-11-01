@@ -36,11 +36,86 @@ def render_clip_management_page():
     
     st.success("✅ Connected to AI-EWG Pipeline")
     
+    # Show previously processed episodes with selection
+    with st.expander("📚 Previously Processed Episodes", expanded=True):
+        st.write("""
+        Select an episode from your previously processed videos to discover and render clips.
+        Only **rendered** episodes are ready for clip generation.
+        """)
+        
+        # Load episodes for the table
+        with st.spinner("📡 Loading processed episodes..."):
+            table_episodes_response = api_client.list_episodes(limit=100, force_refresh=True)
+        
+        if table_episodes_response.success and table_episodes_response.data:
+            table_episodes = table_episodes_response.data
+            
+            if table_episodes:
+                # Show episode counts by stage
+                col_total, col_rendered, col_failed = st.columns(3)
+                
+                total_count = len(table_episodes)
+                rendered_count = sum(1 for ep in table_episodes if ep.get('stage') == 'rendered')
+                failed_count = sum(1 for ep in table_episodes if ep.get('stage') == 'failed')
+                
+                with col_total:
+                    st.metric("Total Episodes", total_count)
+                with col_rendered:
+                    st.metric("✅ Rendered (Ready)", rendered_count)
+                with col_failed:
+                    st.metric("⚠️ Failed", failed_count)
+                
+                st.markdown("---")
+                
+                # Create episodes table
+                import pandas as pd
+                
+                table_data = []
+                for ep in table_episodes:
+                    stage = ep.get('stage', 'N/A')
+                    status_icon = '✅' if stage == 'rendered' else '⚠️' if stage == 'failed' else '🔄'
+                    
+                    table_data.append({
+                        'Status': status_icon,
+                        'Episode ID': ep.get('episode_id', 'N/A')[:35],
+                        'Title': ep.get('title', 'N/A')[:45],
+                        'Show': ep.get('show_name', 'Unknown'),
+                        'Stage': stage,
+                        'Clips Ready': '✅' if stage == 'rendered' else '❌'
+                    })
+                
+                df = pd.DataFrame(table_data)
+                st.dataframe(df, width='stretch', hide_index=True)
+                
+                # Quick actions
+                st.markdown("---")
+                st.write("**Quick Actions:**")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    if st.button("🔄 Refresh List", key="refresh_clips_list", width='stretch'):
+                        st.rerun()
+                
+                with col2:
+                    if st.button("📁 View All Outputs", key="goto_outputs_clips", width='stretch'):
+                        st.session_state['current_page'] = 'View Outputs'
+                        st.rerun()
+                
+                with col3:
+                    if st.button("🎬 Process More Videos", key="goto_process", width='stretch'):
+                        st.session_state['current_page'] = 'Process Videos'
+                        st.rerun()
+            else:
+                st.info("No processed episodes found. Process some videos first!")
+        else:
+            st.warning("Unable to load episodes list.")
+    
     # Episode selection with loading indicator
-    st.subheader("📺 Select Episode")
+    st.subheader("📺 Select Episode for Clip Generation")
     
     with st.spinner("📡 Loading episodes..."):
-        episodes_response = api_client.list_episodes(limit=50)
+        episodes_response = api_client.list_episodes(limit=100)
     
     if not episodes_response.success:
         st.error(f"Failed to load episodes: {episodes_response.error}")
@@ -479,12 +554,16 @@ def render_bulk_rendering_controls(episode_id: str, clips: List[Dict], clip_para
             return
         
         with st.spinner(f"Starting bulk render of {len(clip_ids)} clips..."):
+            # Prepare intelligent crop params if enabled
+            intelligent_crop = clip_params.get("intelligent_crop")
+            
             render_response = api_client.render_clips_bulk(
                 episode_id=episode_id,
                 clip_ids=clip_ids,
                 variants=clip_params.get("variants", ["clean", "subtitled"]),
                 aspect_ratios=clip_params.get("aspect_ratios", ["9x16", "16x9"]),
-                force_rerender=force_rerender
+                force_rerender=force_rerender,
+                intelligent_crop=intelligent_crop
             )
             
             if render_response.success:

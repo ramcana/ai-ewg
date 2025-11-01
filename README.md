@@ -2,7 +2,15 @@
 
 **Automated video processing pipeline that transforms long-form video content into AI-enriched transcripts, interactive web pages, social media clips, and multi-platform packages with comprehensive multilingual support.**
 
-Process videos through multilingual transcription, AI enrichment, speaker diarization, clip generation, and social media package creation - all with organized show-based folder structure and intelligent naming. Now supports 10+ languages with automatic detection and translation capabilities.
+Process videos through multilingual transcription, AI enrichment, speaker diarization, clip generation, and social media package creation - all with organized show-based folder structure and intelligent naming. Features persistent upload management, one-click reprocessing, user-configurable show mappings, and intelligent clip cropping. Supports 10+ languages with automatic detection and translation capabilities.
+
+**Latest Updates (October 2025):**
+- ✅ Episode deletion with file cleanup
+- ✅ One-click reprocessing from history
+- ✅ Persistent uploaded files management
+- ✅ User-configurable show mappings
+- ✅ Intelligent crop integration for clips
+- ✅ Enhanced UI with episode selection
 
 ## 🚀 Quick Start
 
@@ -35,10 +43,11 @@ data/social_packages/{episode_id}/{platform}/  # Social media packages
 **📚 Documentation:**
 
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** - Quick start guide
+- **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)** - Complete system architecture
 - **[docs/MULTILINGUAL_SUPPORT.md](docs/MULTILINGUAL_SUPPORT.md)** - Multilingual transcription guide
 - **[docs/NAMING_SYSTEM.md](docs/NAMING_SYSTEM.md)** - Episode naming and organization
+- **[docs/INTELLIGENT_CROP.md](docs/INTELLIGENT_CROP.md)** - Intelligent cropping for clips
 - **[docs/n8n_docs/](docs/n8n_docs/)** - n8n integration guides
-- **[NAMING_INTEGRATION_COMPLETE.md](NAMING_INTEGRATION_COMPLETE.md)** - Latest features
 
 ---
 
@@ -48,15 +57,15 @@ AI-EWG is an intelligent video processing pipeline that automates the transforma
 
 ### **Processing Pipeline:**
 
-1. **Discovery** - Automatically find and catalog video files
+1. **Discovery** - Automatically find and catalog video files with filename prefix extraction
 2. **Multilingual Transcription** - OpenAI Whisper with auto language detection (10+ languages)
 3. **Translation** - Optional translation to English with metadata preservation
 4. **Enrichment** - AI-powered metadata extraction (show name, host, topics, summaries)
 5. **Diarization** - Speaker identification and segmentation
 6. **Rendering** - Generate interactive HTML pages with synchronized video/transcript
-7. **Clip Generation** - Intelligent highlight detection and video clip creation
+7. **Clip Generation** - Intelligent highlight detection with AI-powered cropping
 8. **Social Packages** - Platform-specific content for YouTube, Instagram, TikTok, etc.
-9. **Organization** - Automatic folder structure by show and year
+9. **Organization** - Automatic folder structure by show and year with consistent naming
 
 ## ✨ Key Features
 
@@ -76,8 +85,9 @@ AI-EWG is an intelligent video processing pipeline that automates the transforma
 ✅ **Show-Based Folders** - Organized by show name and year  
 ✅ **Smart Episode IDs** - Format: `{show}_ep{number}_{date}`  
 ✅ **Automatic Mapping** - AI show names mapped to consistent folders  
-✅ **Configurable Templates** - Customize naming via YAML config  
-✅ **Backward Compatible** - Supports both old and new structures
+✅ **User-Configurable** - Edit show mappings via UI or config file  
+✅ **Filename Prefix Extraction** - Auto-detect show from file prefixes (FDW, FD, MG, etc.)  
+✅ **Consistent Paths** - Single NamingService ensures alignment across all components
 
 ### **Multilingual Support**
 
@@ -91,10 +101,19 @@ AI-EWG is an intelligent video processing pipeline that automates the transforma
 ### **Multi-Platform Output**
 
 ✅ **Interactive HTML** - Synchronized video player with clickable transcript  
-✅ **Video Clips** - Multiple aspect ratios (16:9, 9:16, 1:1)  
+✅ **Video Clips** - Multiple aspect ratios (16:9, 9:16, 1:1) with intelligent cropping  
 ✅ **Social Packages** - Platform-specific metadata and formatting  
 ✅ **Subtitles** - VTT, SRT formats with speaker labels  
 ✅ **JSON-LD** - SEO-optimized structured data
+
+### **User Experience**
+
+✅ **Persistent Uploads** - Files persist across sessions, no re-upload needed  
+✅ **One-Click Reprocessing** - Select from history and reprocess with one click  
+✅ **Episode Management** - Delete episodes with file cleanup  
+✅ **Show Configuration** - User-friendly UI for managing show mappings  
+✅ **Visual Feedback** - Clear status indicators and progress tracking  
+✅ **Bulk Operations** - Process or delete multiple episodes at once
 
 ## 🏭️ Architecture
 
@@ -102,17 +121,18 @@ AI-EWG is an intelligent video processing pipeline that automates the transforma
 
 ```
 src/core/
-├── pipeline.py                  # Main orchestrator
-├── naming_service.py            # Episode naming and organization
-├── registry.py                  # Episode database management
+├── pipeline.py                  # Main orchestrator with force reprocess
+├── naming_service.py            # Single source of truth for naming
+├── registry.py                  # Episode database with delete support
 ├── discovery_engine.py          # Video file discovery
 ├── clip_discovery.py            # Intelligent clip detection
-├── clip_export.py               # Video clip rendering
-├── topic_segmentation.py        # Semantic topic boundary detection
+├── clip_export.py               # Video clip rendering with intelligent crop
+├── topic_segmentation.py        # Semantic topic boundary detection (GPU)
 ├── correction_engine.py         # Self-learning transcript corrections
 ├── package_generator.py         # Social media packages
 ├── policy_engine.py             # Platform-specific policies
 ├── job_queue.py                 # Background job processing
+├── clip_registry.py             # Clip database management
 └── models.py                    # Data models
 
 src/stages/
@@ -133,6 +153,7 @@ src/api/
 ```
 config/
 ├── pipeline.yaml                # Main pipeline configuration
+├── show_mappings.json           # User-defined show name mappings
 └── platforms/                   # Social media platform configs
     ├── youtube.yaml
     ├── instagram.yaml
@@ -338,16 +359,20 @@ data/outputs/
 
 ### **Show Mappings**
 
-AI-extracted show names are automatically mapped to consistent folder names:
+AI-extracted show names and filename prefixes are automatically mapped to consistent folder names:
 
-| AI Extracted | Folder Name |
-|--------------|-------------|
-| "Forum Daily News" | `ForumDailyNews` |
-| "Boom and Bust" | `BoomAndBust` |
-| "Canadian Justice" | `CanadianJustice` |
-| "The LeDrew Show" | `TheLeDrewShow` |
+| AI Extracted | Filename Prefix | Folder Name |
+|--------------|----------------|-------------|
+| "Forum Daily News" | FD | `ForumDailyNews` |
+| "Forum Daily Week" | FDW | `ForumDailyWeek` |
+| "My Generation" | MG | `MyGeneration` |
+| "Boom and Bust" | BB | `BoomAndBust` |
+| "Canadian Justice" | CJ | `CanadianJustice` |
+| "The LeDrew Show" | LS | `TheLeDrewShow` |
 
-See [docs/NAMING_SYSTEM.md](docs/NAMING_SYSTEM.md) for complete documentation.
+**Configuration:** Edit via Streamlit UI (Show Configuration page) or `config/show_mappings.json`
+
+See [docs/NAMING_SYSTEM.md](docs/NAMING_SYSTEM.md) and [docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md) for complete documentation.
 
 ## 🧪 Testing
 
@@ -475,13 +500,44 @@ The platform includes comprehensive error handling with automatic recovery:
 5. Push to branch: `git push origin feature/amazing-feature`
 6. Open a Pull Request
 
+## 🆕 Recent Enhancements (October 2025)
+
+### **Episode Management**
+- ✅ **Delete Episodes** - Remove episodes with automatic file cleanup
+- ✅ **Reprocess Episodes** - One-click reprocessing from history with force regeneration
+- ✅ **Bulk Operations** - Delete multiple failed episodes at once
+
+### **Upload Management**
+- ✅ **Persistent Uploads** - Files in `data/temp/uploaded` persist across sessions
+- ✅ **Visual File List** - See all uploaded files with sizes
+- ✅ **Per-File Actions** - Use or delete individual files
+- ✅ **Bulk Processing** - Process all uploaded files at once
+
+### **Show Configuration**
+- ✅ **User-Configurable Mappings** - Edit show mappings via UI
+- ✅ **Folder Path Preview** - See output paths before processing
+- ✅ **Alias Support** - Multiple names map to same show
+- ✅ **Config File Sync** - Changes saved to `config/show_mappings.json`
+
+### **Clip Management**
+- ✅ **Intelligent Cropping** - AI-powered face tracking and motion detection
+- ✅ **Episode Selection** - Previously processed episodes section
+- ✅ **Status Dashboard** - Visual metrics for clip readiness
+- ✅ **Crop Strategies** - Hybrid, face tracking, motion aware, center
+
+### **Naming System**
+- ✅ **Filename Prefix Extraction** - Auto-detect show from FDW, FD, MG, etc.
+- ✅ **Consistent Paths** - NamingService ensures alignment across all components
+- ✅ **Database Integration** - Canonical names stored for reliable retrieval
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
-- **Documentation**: [docs/DRY_RUN_SETUP_CHECKLIST.md](docs/DRY_RUN_SETUP_CHECKLIST.md)
+- **System Overview**: [docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)
+- **Documentation**: [docs/](docs/)
 - **Examples**: [examples/](examples/)
 - **Issues**: GitHub Issues
 - **Discussions**: GitHub Discussions

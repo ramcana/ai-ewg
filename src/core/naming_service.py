@@ -33,17 +33,27 @@ class NamingConfig:
 # Show name mapping - AI extracted name → folder name
 SHOW_NAME_MAPPING = {
     # The News Forum shows
-    "the news forum": "thenewsforum",
-    "news forum": "thenewsforum",
-    "newsroom": "thenewsforum",
-    "the newsroom": "thenewsforum",
+    "the news forum": "TheNewsForum",
+    "news forum": "TheNewsForum",
+    "newsroom": "TheNewsForum",
+    "the newsroom": "TheNewsForum",
     
     # Individual shows
     "forum daily news": "ForumDailyNews",
     "daily news": "ForumDailyNews",
     
+    "forum daily week": "ForumDailyWeek",
+    "daily week": "ForumDailyWeek",
+    "fdw": "ForumDailyWeek",
+    
     "boom and bust": "BoomAndBust",
     "boom & bust": "BoomAndBust",
+    
+    "community profile": "CommunityProfile",
+    
+    "economic pulse": "EconomicPulse",
+    
+    "freedom forum": "FreedomForum",
     
     "canadian justice": "CanadianJustice",
     
