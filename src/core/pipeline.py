@@ -124,10 +124,11 @@ class PipelineOrchestrator:
             ProcessingStage.PREPPED: self._process_prep_stage,
             ProcessingStage.TRANSCRIBED: self._process_transcription_stage,
             ProcessingStage.ENRICHED: self._process_enrichment_stage,
-            ProcessingStage.RENDERED: self._process_rendering_stage
+            ProcessingStage.RENDERED: self._process_rendering_stage,
+            ProcessingStage.CLIPS_DISCOVERED: self._process_clips_discovery_stage
         }
     
-    async def process_episode(self, episode_id: str, target_stage: ProcessingStage = ProcessingStage.RENDERED, force_reprocess: bool = False) -> ProcessingResult:
+    async def process_episode(self, episode_id: str, target_stage: ProcessingStage = ProcessingStage.RENDERED, force_reprocess: bool = False, include_clip_discovery: bool = None) -> ProcessingResult:
         """
         Process a single episode through the pipeline stages
         
@@ -135,6 +136,8 @@ class PipelineOrchestrator:
             episode_id: Unique identifier for the episode
             target_stage: Final stage to process to
             force_reprocess: If True, reprocess even if already at target stage
+            include_clip_discovery: If True, include clip discovery after rendering. 
+                                  If None, use config setting.
             
         Returns:
             ProcessingResult: Result of the processing operation
@@ -168,10 +171,23 @@ class PipelineOrchestrator:
             # Process through each required stage
             stages_to_process = self._get_stages_to_process(current_stage, target_stage)
             
+            # Add clip discovery if enabled and target stage is RENDERED or higher
+            if include_clip_discovery is None:
+                include_clip_discovery = self.config.clip_generation.enabled
+            
+            if (include_clip_discovery and 
+                target_stage in [ProcessingStage.RENDERED, ProcessingStage.CLIPS_DISCOVERED] and
+                current_stage != ProcessingStage.CLIPS_DISCOVERED):
+                # If we're processing to RENDERED and clip discovery is enabled, extend to CLIPS_DISCOVERED
+                if target_stage == ProcessingStage.RENDERED:
+                    target_stage = ProcessingStage.CLIPS_DISCOVERED
+                    stages_to_process = self._get_stages_to_process(current_stage, target_stage)
+            
             self.logger.info(f"Stages to process: {[s.value for s in stages_to_process]}", 
                            episode_id=episode_id,
                            current_stage=current_stage.value,
-                           target_stage=target_stage.value)
+                           target_stage=target_stage.value,
+                           clip_discovery_enabled=include_clip_discovery)
             
             for stage in stages_to_process:
                 if self._shutdown_requested:
@@ -222,7 +238,8 @@ class PipelineOrchestrator:
     async def process_batch(self, episode_ids: List[str], 
                           target_stage: ProcessingStage = ProcessingStage.RENDERED,
                           max_concurrent: Optional[int] = None,
-                          progress_callback: Optional[Callable] = None) -> BatchProcessingStats:
+                          progress_callback: Optional[Callable] = None,
+                          include_clip_discovery: bool = None) -> BatchProcessingStats:
         """
         Process multiple episodes concurrently
         
@@ -252,7 +269,7 @@ class PipelineOrchestrator:
         
         async def process_with_semaphore(episode_id: str) -> ProcessingResult:
             async with semaphore:
-                result = await self.process_episode(episode_id, target_stage)
+                result = await self.process_episode(episode_id, target_stage, include_clip_discovery=include_clip_discovery)
                 
                 # Call progress callback if provided
                 if progress_callback:
@@ -423,6 +440,7 @@ class PipelineOrchestrator:
     async def _process_transcription_stage(self, episode_id: str) -> None:
         """Process transcription stage - run Whisper"""
         from ..stages.transcription_stage import TranscriptionStageProcessor
+        from ..core.models import TranscriptionResult
         
         self.logger.info("Processing transcription stage", episode_id=episode_id)
         
@@ -431,20 +449,67 @@ class PipelineOrchestrator:
         if not episode:
             raise ProcessingError(f"Episode not found: {episode_id}")
         
+        # Check if transcription already exists and is valid
+        if episode.transcription and episode.transcription.text:
+            self.logger.info("Transcription already exists, skipping Whisper",
+                           episode_id=episode_id,
+                           text_length=len(episode.transcription.text),
+                           has_words=len(episode.transcription.words) > 0 if episode.transcription.words else False)
+            
+            # Store existing transcript data for next stage
+            self._stage_data[episode_id] = {
+                'transcript': {
+                    'success': True,
+                    'text': episode.transcription.text,
+                    'segments': episode.transcription.segments,
+                    'words': episode.transcription.words,
+                    'language': episode.transcription.language,
+                    'vtt_path': f"data/transcripts/{episode_id}/transcript.vtt"
+                }
+            }
+            return
+        
+        self.logger.info("No existing transcription found, running Whisper", episode_id=episode_id)
+        
         # Find audio path
         audio_path = f"data/audio/{episode_id}.wav"
         
-        # Run transcription processor
-        processor = TranscriptionStageProcessor(model_name=self.config.models.whisper)
+        # Run transcription processor with multilingual configuration
+        processor = TranscriptionStageProcessor(
+            model_name=self.config.models.whisper,
+            config=self.config.to_dict()  # Pass full config for multilingual settings
+        )
         result = await processor.process(episode, audio_path)
         
         # Store transcript data for next stage
         self._stage_data[episode_id] = {'transcript': result}
         
         if result['success']:
+            # Update episode with transcription results
+            with open(result['vtt_path'], 'r', encoding='utf-8') as f:
+                vtt_content = f.read()
+            
+            episode.transcription = TranscriptionResult(
+                text=result['text'],
+                vtt_content=vtt_content,
+                segments=result['segments'],
+                words=result.get('words', []),
+                language=result.get('language', 'en'),
+                model_used=self.config.models.whisper,
+                # Multilingual support fields
+                detected_language=result.get('detected_language'),
+                original_language=result.get('original_language'),
+                task_performed=result.get('task_performed', 'transcribe'),
+                translated_to_english=result.get('translated_to_english', False)
+            )
+            
+            # Save updated episode to database
+            self.registry.update_episode_data(episode)
+            
             self.logger.info("Transcription stage completed",
                            episode_id=episode_id,
-                           word_count=result.get('word_count', 0))
+                           word_count=result.get('word_count', 0),
+                           word_timestamps=len(result.get('words', [])) > 0)
     
     async def _process_enrichment_stage(self, episode_id: str) -> None:
         """Process enrichment stage - run intelligence chain"""
@@ -456,6 +521,35 @@ class PipelineOrchestrator:
         episode = self.registry.get_episode(episode_id)
         if not episode:
             raise ProcessingError(f"Episode not found: {episode_id}")
+        
+        # Check if enrichment already exists and is valid
+        if episode.enrichment and episode.enrichment.show_name:
+            self.logger.info("Enrichment already exists, skipping AI analysis",
+                           episode_id=episode_id,
+                           show_name=episode.enrichment.show_name,
+                           host_name=episode.enrichment.host_name,
+                           has_summary=bool(episode.enrichment.executive_summary))
+            
+            # Store existing enrichment data for next stage
+            if episode_id not in self._stage_data:
+                self._stage_data[episode_id] = {}
+            self._stage_data[episode_id]['enrichment'] = {
+                'success': True,
+                'enrichment_data': {
+                    'ai_analysis': {
+                        'show_name': episode.enrichment.show_name,
+                        'host_name': episode.enrichment.host_name,
+                        'executive_summary': episode.enrichment.executive_summary,
+                        'key_takeaways': episode.enrichment.key_takeaways,
+                        'deep_analysis': episode.enrichment.deep_analysis,
+                        'topics': episode.enrichment.topics,
+                        'segment_titles': episode.enrichment.segment_titles
+                    }
+                }
+            }
+            return
+        
+        self.logger.info("No existing enrichment found, running AI analysis", episode_id=episode_id)
         
         audio_path = f"data/audio/{episode_id}.wav"
         transcript_data = self._stage_data.get(episode_id, {}).get('transcript', {})
@@ -473,8 +567,100 @@ class PipelineOrchestrator:
         self._stage_data[episode_id]['enrichment'] = result
         
         if result['success']:
+            # Create EnrichmentResult object and save to episode
+            from ..core.models import EnrichmentResult
+            
+            enrichment_data = result.get('enrichment_data', {})
+            ai_analysis = enrichment_data.get('ai_analysis', {})
+            summary_data = enrichment_data.get('summary', {})
+            
+            enrichment_result = EnrichmentResult(
+                # Intelligence Chain V2 results
+                diarization=enrichment_data.get('diarization'),
+                entities=enrichment_data.get('entities'),
+                proficiency_scores=enrichment_data.get('proficiency_scores'),
+                enriched_guests=enrichment_data.get('enriched_guests'),
+                
+                # AI-extracted metadata
+                show_name=enrichment_data.get('show_name_extracted'),
+                host_name=enrichment_data.get('host_name_extracted'),
+                
+                # AI analysis
+                executive_summary=ai_analysis.get('executive_summary'),
+                key_takeaways=ai_analysis.get('key_takeaways', []),
+                deep_analysis=ai_analysis.get('deep_analysis'),
+                topics=ai_analysis.get('topics', []),
+                segment_titles=ai_analysis.get('segment_titles', []),
+                
+                # Summary for display
+                summary=summary_data.get('key_takeaway'),
+                description=summary_data.get('description'),
+                tags=summary_data.get('tags', [])
+            )
+            
+            # Update episode with enrichment data
+            episode.enrichment = enrichment_result
+            
+            # Update episode metadata with AI-extracted show name and regenerate ID if needed
+            old_episode_id = episode_id
+            if enrichment_result.show_name:
+                from .naming_service import get_naming_service
+                import re
+                naming_service = get_naming_service()
+                
+                # Update metadata with AI-extracted show name
+                episode.metadata.show_name = enrichment_result.show_name
+                episode.metadata.show_slug = naming_service.map_show_name(enrichment_result.show_name)
+                
+                self.logger.info("Updated episode metadata with AI-extracted show name",
+                               episode_id=episode_id,
+                               show_name=enrichment_result.show_name,
+                               show_slug=episode.metadata.show_slug)
+                
+                # Try to extract episode number from enrichment or filename
+                episode_number = enrichment_result.episode_number
+                
+                # If no episode number from AI, try to extract from filename
+                if not episode_number and episode.source and episode.source.path:
+                    filename = Path(episode.source.path).stem
+                    # Look for patterns like FD1314, EP140, etc.
+                    match = re.search(r'(?:FD|EP|E)?(\d{3,4})', filename, re.IGNORECASE)
+                    if match:
+                        episode_number = match.group(1)
+                        self.logger.info("Extracted episode number from filename",
+                                       filename=filename,
+                                       episode_number=episode_number)
+                
+                new_episode_id = naming_service.generate_episode_id(
+                    show_name=enrichment_result.show_name,
+                    episode_number=episode_number,
+                    date=episode.created_at or datetime.now()
+                )
+                
+                # Only update if ID actually changed
+                if new_episode_id != old_episode_id:
+                    self.logger.info("Episode ID would change with AI metadata (skipping rename due to foreign key constraints)",
+                                   old_id=old_episode_id,
+                                   new_id=new_episode_id,
+                                   show_name=enrichment_result.show_name,
+                                   episode_number=episode_number)
+                    
+                    # DISABLED: Renaming episode IDs breaks foreign key constraints in clips/social_jobs tables
+                    # The episode ID is used as a foreign key in multiple tables, so we can't rename it
+                    # Instead, we store the show name and episode number in the episode metadata
+                    # 
+                    # TODO: In future, implement proper ID migration that updates all foreign keys
+                    # self.registry.update_episode_id(old_episode_id, new_episode_id)
+                    # episode.episode_id = new_episode_id
+                    # episode_id = new_episode_id
+            
+            # Save enrichment data to database
+            self.registry.update_episode_data(episode)
+            
             self.logger.info("Enrichment stage completed",
-                           episode_id=episode_id)
+                           episode_id=episode_id,
+                           show_name=enrichment_result.show_name,
+                           host_name=enrichment_result.host_name)
     
     async def _process_rendering_stage(self, episode_id: str) -> None:
         """Process rendering stage - generate web artifacts"""
@@ -503,6 +689,38 @@ class PipelineOrchestrator:
             self.logger.info("Rendering stage completed",
                            episode_id=episode_id,
                            html_path=result.get('html_path'))
+    
+    async def _process_clips_discovery_stage(self, episode_id: str) -> None:
+        """Process clip discovery stage - discover and score clips"""
+        # Only run if clip generation is enabled
+        if not self.config.clip_generation.enabled:
+            self.logger.info("Clip generation disabled, skipping clip discovery", episode_id=episode_id)
+            return
+        
+        from ..core.clip_discovery import ClipDiscoveryEngine
+        
+        self.logger.info("Processing clip discovery stage", episode_id=episode_id)
+        
+        # Get episode
+        episode = self.registry.get_episode(episode_id)
+        if not episode:
+            raise ProcessingError(f"Episode not found: {episode_id}")
+        
+        # Run clip discovery with reliability context
+        try:
+            discovery_engine = ClipDiscoveryEngine(self.config.clip_generation)
+            result = await discovery_engine.discover_clips(episode_id)
+            
+            if result['success']:
+                self.logger.info("Clip discovery stage completed",
+                               episode_id=episode_id,
+                               clips_discovered=result.get('clips_count', 0))
+            else:
+                raise ProcessingError(f"Clip discovery failed: {result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            self.logger.error("Clip discovery stage failed", episode_id=episode_id, error=str(e))
+            raise ProcessingError(f"Clip discovery failed: {e}")
     
     def initialize_database(self) -> None:
         """Initialize database and registry"""
@@ -639,11 +857,61 @@ class PipelineOrchestrator:
                 if any(video_file.match(exclude) for exclude in source.exclude):
                     continue
                 
-                # Generate episode ID
+                # Generate structured episode ID using NamingService
+                from .naming_service import get_naming_service
+                import re
+                
+                naming_service = get_naming_service()
                 filename = video_file.stem
-                show_name = video_file.parent.parent.name  # e.g., "newsroom"
-                year = video_file.parent.name  # e.g., "2024"
-                episode_id = f"{show_name}-{year}-{filename.lower()}"
+                
+                # Infer show name from folder structure
+                # Path structure: input_videos/TheNewsForum/ForumDailyNews/video.mp4
+                # or: data/temp/uploaded/video.mp4
+                parent_folder = video_file.parent.name
+                grandparent_folder = video_file.parent.parent.name if video_file.parent.parent else None
+                
+                # Try to map folder name to show name
+                show_name = None
+                if parent_folder and parent_folder != "uploaded":
+                    show_name = parent_folder
+                elif grandparent_folder and grandparent_folder != "temp":
+                    show_name = grandparent_folder
+                
+                # For uploaded files, try to extract show name from filename prefix
+                # Examples: FDW_09.24.25.mp4 → FDW, FD1314_10-27-25.mp4 → FD
+                if not show_name and parent_folder == "uploaded":
+                    prefix_match = re.match(r'^([A-Z]{2,4})[\d_-]', filename, re.IGNORECASE)
+                    if prefix_match:
+                        prefix = prefix_match.group(1).upper()
+                        # Map common prefixes to show names
+                        prefix_mapping = {
+                            'FD': 'Forum Daily News',
+                            'FDW': 'Forum Daily Week',
+                            'BB': 'Boom and Bust',
+                            'CP': 'Community Profile',
+                            'EP': 'Economic Pulse',
+                            'FF': 'Freedom Forum',
+                            'MG': 'My Generation',
+                            'CJ': 'Canadian Justice',
+                            'CI': 'Canadian Innovators',
+                            'LS': 'The LeDrew Show'
+                        }
+                        show_name = prefix_mapping.get(prefix, prefix)
+                        self.logger.info(f"Extracted show name from filename prefix: {prefix} -> {show_name}")
+                
+                # Try to extract episode number from filename
+                episode_number = None
+                match = re.search(r'(?:FD|EP|E)?(\d{3,4})', filename, re.IGNORECASE)
+                if match:
+                    episode_number = match.group(1)
+                
+                # Generate structured episode ID
+                episode_id = naming_service.generate_episode_id(
+                    show_name=show_name,
+                    episode_number=episode_number,
+                    date=datetime.fromtimestamp(video_file.stat().st_mtime),
+                    source_filename=filename
+                )
                 
                 # Calculate file hash for content-based deduplication
                 file_hash = self._calculate_file_hash(video_file)
@@ -678,13 +946,23 @@ class PipelineOrchestrator:
                 # Extract video duration using ffprobe
                 duration = self._get_video_duration(video_file)
                 
+                # Store relative path from project root to make database portable
+                try:
+                    # Get project root (where pipeline.py is: src/core/pipeline.py -> 2 levels up)
+                    project_root = Path(__file__).parent.parent.parent.resolve()
+                    relative_path = video_file.relative_to(project_root)
+                    source_path = str(relative_path).replace('\\', '/')
+                except ValueError:
+                    # File is outside project root, store absolute path
+                    source_path = str(video_file).replace('\\', '/')
+                
                 # Create episode object
                 episode = EpisodeObject(
                     episode_id=episode_id,
                     content_hash=file_hash,
                     processing_stage=ProcessingStage.DISCOVERED,
                     source=SourceInfo(
-                        path=str(video_file),
+                        path=source_path,
                         file_size=file_size,
                         last_modified=last_modified
                     ),
@@ -693,7 +971,7 @@ class PipelineOrchestrator:
                     ),
                     metadata=EpisodeMetadata(
                         show_name=show_name,
-                        show_slug=show_name.lower(),
+                        show_slug=show_name.lower() if show_name else "uncategorized",
                         title=filename
                     )
                 )
@@ -794,9 +1072,40 @@ class PipelineOrchestrator:
         """List episodes with optional filtering"""
         try:
             registry = self.get_registry()
-            # This would use registry methods when implemented
-            # For now, return empty list
-            return []
+            
+            # Get all episodes from registry
+            all_episodes = registry.list_episodes()
+            
+            # Filter by stage if specified
+            if stage_filter:
+                all_episodes = [ep for ep in all_episodes if ep.processing_stage == stage_filter]
+            
+            # Limit results
+            episodes = all_episodes[:limit]
+            
+            # Convert to dict format for API response
+            result = []
+            for ep in episodes:
+                episode_dict = {
+                    'episode_id': ep.episode_id,
+                    'stage': ep.processing_stage.value if ep.processing_stage else 'unknown',
+                    'source_path': ep.source.path if ep.source else '',
+                    'file_size': ep.source.file_size if ep.source else 0,
+                    'show_name': ep.metadata.show_name if ep.metadata else 'Unknown',
+                    'title': ep.metadata.title if ep.metadata else ep.episode_id,
+                    'show': ep.metadata.show_name if ep.metadata else None,
+                    'duration': ep.media.duration_seconds if ep.media else 0,
+                    'created_at': ep.created_at.isoformat() if ep.created_at else None,
+                    'updated_at': ep.updated_at.isoformat() if ep.updated_at else None,
+                    'errors': ep.errors,
+                    'metadata': ep.metadata.to_dict() if ep.metadata else None,
+                    'enrichment': ep.enrichment.to_dict() if ep.enrichment else None,
+                    'transcription': ep.transcription.to_dict() if ep.transcription else None
+                }
+                result.append(episode_dict)
+            
+            return result
+            
         except Exception as e:
             self.logger.error(f"Error listing episodes", error=str(e))
             return []

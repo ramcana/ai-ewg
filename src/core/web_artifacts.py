@@ -896,14 +896,22 @@ p {
     def _generate_header(self, episode: EpisodeObject) -> str:
         """Generate header section with show name, episode info, and host"""
         # Get show name (prefer AI-extracted, fallback to metadata)
-        enrichment = episode.enrichment if isinstance(episode.enrichment, dict) else {}
-        show_name = enrichment.get('show_name_extracted') or episode.metadata.show_name or "Episode"
-        
-        # Get host name from AI extraction
-        host_name = enrichment.get('host_name_extracted', '')
-        ai_analysis = enrichment.get('ai_analysis', {})
-        if not host_name:
-            host_name = ai_analysis.get('host_name', '')
+        # Handle both dict and EnrichmentResult object
+        if isinstance(episode.enrichment, dict):
+            enrichment = episode.enrichment
+            show_name = enrichment.get('show_name_extracted') or enrichment.get('show_name') or episode.metadata.show_name or "Episode"
+            host_name = enrichment.get('host_name_extracted') or enrichment.get('host_name', '')
+            # Also check ai_analysis section
+            ai_analysis = enrichment.get('ai_analysis', {})
+            if not host_name:
+                host_name = ai_analysis.get('host_name', '')
+        elif episode.enrichment:
+            # EnrichmentResult object
+            show_name = episode.enrichment.show_name or episode.metadata.show_name or "Episode"
+            host_name = episode.enrichment.host_name or ''
+        else:
+            show_name = episode.metadata.show_name or "Episode"
+            host_name = ''
         
         title = self._get_episode_title(episode)
         
@@ -954,14 +962,25 @@ p {
         sections = []
         
         # Check for AI-enhanced enrichment data
-        ai_analysis = None
+        # Handle both dict and EnrichmentResult object
+        ai_analysis = {}
+        enrichment_data = None
+        
         if episode.enrichment:
-            # Try to get AI analysis from enrichment
-            enrichment_data = episode.enrichment
-            if hasattr(enrichment_data, 'get'):
-                ai_analysis = enrichment_data.get('ai_analysis', {})
-            elif hasattr(enrichment_data, 'ai_analysis'):
-                ai_analysis = enrichment_data.ai_analysis
+            if isinstance(episode.enrichment, dict):
+                # Dict format - check for ai_analysis section or use root level
+                enrichment_data = episode.enrichment
+                ai_analysis = enrichment_data.get('ai_analysis', enrichment_data)
+            else:
+                # EnrichmentResult object - extract fields
+                enrichment_data = episode.enrichment
+                ai_analysis = {
+                    'executive_summary': enrichment_data.executive_summary,
+                    'key_takeaways': enrichment_data.key_takeaways,
+                    'deep_analysis': enrichment_data.deep_analysis,
+                    'topics': enrichment_data.topics,
+                    'segment_titles': enrichment_data.segment_titles
+                }
         
         # AI Enhanced Badge
         if ai_analysis and (ai_analysis.get('executive_summary') or ai_analysis.get('key_takeaways')):

@@ -6,8 +6,10 @@ Creates: data/audio/{episode_id}.wav
 """
 
 import subprocess
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional
+from fractions import Fraction
 import json
 
 from ..core.logging import get_logger
@@ -37,8 +39,8 @@ class PrepStageProcessor:
         try:
             logger.info("Starting media preparation", episode_id=episode.episode_id)
             
-            # Verify source file exists
-            source_path = Path(episode.source.path)
+            # Verify source file exists (resolve relative paths to absolute)
+            source_path = episode.source.get_absolute_path()
             if not source_path.exists():
                 raise ProcessingError(f"Source file not found: {source_path}")
             
@@ -80,7 +82,9 @@ class PrepStageProcessor:
                 str(video_path)
             ]
             
-            result = subprocess.run(
+            # Offload blocking subprocess to thread executor
+            result = await asyncio.to_thread(
+                subprocess.run,
                 cmd,
                 capture_output=True,
                 text=True,
@@ -100,13 +104,21 @@ class PrepStageProcessor:
                 {}
             )
             
+            # Safely parse frame rate using Fraction instead of eval()
+            frame_rate_str = video_stream.get('r_frame_rate', '0/1')
+            try:
+                frame_rate = float(Fraction(frame_rate_str))
+            except (ValueError, ZeroDivisionError):
+                logger.warning(f"Invalid frame rate format: {frame_rate_str}, defaulting to 0")
+                frame_rate = 0.0
+            
             return {
                 'duration': float(format_data.get('duration', 0)),
                 'bitrate': int(format_data.get('bit_rate', 0)),
                 'video_codec': video_stream.get('codec_name'),
                 'audio_codec': audio_stream.get('codec_name'),
                 'resolution': f"{video_stream.get('width', 0)}x{video_stream.get('height', 0)}",
-                'frame_rate': eval(video_stream.get('r_frame_rate', '0/1'))
+                'frame_rate': frame_rate
             }
             
         except subprocess.CalledProcessError as e:
@@ -130,7 +142,9 @@ class PrepStageProcessor:
             
             logger.debug("Running ffmpeg", command=' '.join(cmd))
             
-            result = subprocess.run(
+            # Offload blocking subprocess to thread executor
+            result = await asyncio.to_thread(
+                subprocess.run,
                 cmd,
                 capture_output=True,
                 text=True,

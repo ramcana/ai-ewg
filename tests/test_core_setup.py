@@ -177,7 +177,7 @@ class TestPipelineOrchestrator:
         try:
             orchestrator = PipelineOrchestrator(config_path=config_path)
             assert orchestrator.config is not None
-            assert len(orchestrator._stage_processors) == 5
+            assert len(orchestrator._stage_processors) == 6  # Updated: added clips_discovered stage
         finally:
             Path(config_path).unlink()
     

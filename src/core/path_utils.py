@@ -3,7 +3,7 @@ Path normalization utilities for cross-platform compatibility
 
 Handles path conversions between:
 - Docker container paths (Linux-style: /data/...)
-- Windows host paths (D:\n8n\ai-ewg\...)
+- Windows host paths (relative to project root)
 - UNC network paths (\\server\share\...)
 """
 
@@ -13,6 +13,10 @@ from typing import Optional, Union
 from .logging import get_logger
 
 logger = get_logger('pipeline.path_utils')
+
+# Get project root dynamically (where this file is located: src/core/path_utils.py)
+# Project root is 2 levels up from this file
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 
 
 def normalize_path(path_str: str) -> Path:
@@ -33,10 +37,10 @@ def normalize_path(path_str: str) -> Path:
         
     Example:
         >>> normalize_path("/data/videos/test.mp4")
-        WindowsPath('D:/n8n/ai-ewg/data/videos/test.mp4')  # on Windows
+        WindowsPath('path/to/project/data/videos/test.mp4')  # Relative to project root
         
-        >>> normalize_path("D:\\videos\\test.mp4")
-        WindowsPath('D:/videos/test.mp4')
+        >>> normalize_path("videos\\test.mp4")
+        WindowsPath('path/to/project/videos/test.mp4')
     """
     if not path_str:
         raise ValueError("Path string cannot be empty")
@@ -52,15 +56,24 @@ def normalize_path(path_str: str) -> Path:
         
         # If path doesn't exist, try container-to-host mapping
         if path_str.startswith('/data'):
-            # Map Docker container path to Windows host path
-            # /data -> D:\n8n\ai-ewg\data
-            host_path = path_str.replace('/data', 'D:/n8n/ai-ewg/data', 1)
-            host_path = host_path.replace('/', '\\')
-            mapped = Path(host_path)
+            # Map Docker container path to project root path
+            # /data -> <project_root>/data
+            relative_path = path_str[1:]  # Remove leading /
+            mapped = _PROJECT_ROOT / relative_path
             
             if mapped.exists():
                 logger.debug(f"Mapped container path to host: {path_str} -> {mapped}")
                 return mapped.resolve()
+            
+            # Return the mapped path even if it doesn't exist yet
+            return mapped
+        
+        # If it's a relative path, resolve from project root
+        if not path.is_absolute():
+            resolved = _PROJECT_ROOT / path
+            if resolved.exists():
+                return resolved.resolve()
+            return resolved
         
         # Return the normalized path even if it doesn't exist
         # (might be created later)

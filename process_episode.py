@@ -16,14 +16,21 @@ def discover_episodes():
     print(json.dumps(data, indent=2))
     return data
 
-def process_episode(episode_id):
+def process_episode(episode_id, force_reprocess=False, clear_cache=False):
     """Process a single episode"""
     print(f"\n🚀 Processing episode: {episode_id}")
     print("⏱️  This will take 5-10 minutes (transcription + enrichment + rendering)...")
     
+    if clear_cache:
+        print("🧹 Clearing cache for clean processing...")
+    
+    if force_reprocess:
+        print("🔄 Force reprocessing enabled...")
+    
     payload = {
         "episode_id": episode_id,
-        "force_reprocess": False
+        "force_reprocess": force_reprocess,
+        "clear_cache": clear_cache
     }
     
     start_time = time.time()
@@ -86,8 +93,18 @@ def process_episode(episode_id):
         return None
 
 if __name__ == "__main__":
+    import sys
+    
+    # Parse command line arguments
+    force_reprocess = "--force" in sys.argv
+    clear_cache = "--clear-cache" in sys.argv
+    
     print("=" * 60)
     print("AI-EWG Phase 2 Integration Test")
+    if force_reprocess:
+        print("🔄 Force reprocessing enabled")
+    if clear_cache:
+        print("🧹 Cache clearing enabled")
     print("=" * 60)
     
     # Step 1: Discover episodes
@@ -100,7 +117,7 @@ if __name__ == "__main__":
         
         if episode_id:
             # Step 2: Process episode
-            result = process_episode(episode_id)
+            result = process_episode(episode_id, force_reprocess, clear_cache)
             
             print("\n" + "=" * 60)
             print("Test Complete!")
@@ -109,3 +126,9 @@ if __name__ == "__main__":
             print("❌ No episode_id found")
     else:
         print("❌ No episodes discovered")
+        
+    print("\n💡 Usage:")
+    print("  python process_episode.py                    # Normal processing")
+    print("  python process_episode.py --force            # Force reprocess")
+    print("  python process_episode.py --clear-cache      # Clear cache first")
+    print("  python process_episode.py --force --clear-cache  # Both options")

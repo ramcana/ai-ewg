@@ -39,6 +39,7 @@ test_videos/
 
 # Tool-specific
 .kiro/
+!.kiro/specs/
 
 # Database files
 *.db
@@ -70,3 +71,67 @@ test-results.xml
 # OS
 Thumbs.db
 .DS_Store
+
+# n8n Workflows (contain credentials and environment-specific configs)
+n8n_workflows/*.json
+!n8n_workflows/README.md
+n8n_workflows/test/
+
+# Backup files
+*.db.backup
+pipeline_backup_*.db
+
+# Temporary test outputs
+test_output.html
+*_output.html
+
+# Development & Debug Files
+CLIP_GENERATION_FIX.md
+FSAT_RESULTS.md
+MIGRATION_SUMMARY.md
+UNIFIED_ENVIRONMENT_GUIDE.md
+SQLITE_FIXES_SUMMARY.md
+restart_api_server.md
+
+# Development Scripts
+check_schema.ps1
+cleanup_for_final_test.ps1
+fsat_phase*.ps1
+prepare_fsat.ps1
+install_clip_dependencies.ps1
+install_ml_current_env.py
+migrate_to_unified_env.ps1
+setup_clip_env.py
+start_server_clip_env.bat
+start_server_new_env.py
+test_clip_env.bat
+verify_episode.py
+
+# Development Test Scripts
+process_clips.py
+test_clip_simple.py
+test_clips_fallback.py
+test_clips_quick.py
+test_dependencies.py
+test_install.py
+test_phase*.py
+test_subtitle_debug.py
+
+# Development Test Files (keep test_mini.py for CI)
+tests/test_clip_export.py
+tests/test_clip_highlight_scoring.py
+tests/test_clip_integration.py
+tests/test_clip_sentence_alignment.py
+tests/test_clip_topic_segmentation.py
+
+# Obsolete/Non-Essential Test Files
+tests/test_registry.py
+tests/test_all_components.py
+test_feed_validator_implementation.py
+test_simple_import.py
+
+# Development Documentation
+docs/CLIP_FSAT_PLAN.md
+docs/FSAT_EVALUATION.md
+docs/FSAT_TEST_EPISODE.txt
+docs/setup/INSTALLATION_CHECKLIST.md
